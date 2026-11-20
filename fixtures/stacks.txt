@@ -1,0 +1,15 @@
+panic: synthetic Go failure
+
+goroutine 1 [running]:
+main.main()
+	/synthetic/main.go:10 +0x1
+INFO next record
+Traceback (most recent call last):
+  File "synthetic.py", line 1, in <module>
+    raise ValueError("synthetic")
+ValueError: synthetic
+INFO next record
+TypeError: synthetic Node failure
+    at handle (/synthetic/app.js:10:2)
+    at main (/synthetic/app.js:20:1)
+INFO next record

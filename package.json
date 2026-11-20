@@ -1,0 +1,12 @@
+{
+  "name": "tailpro", "version": "0.1.0", "private": true, "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 1420 --strictPort",
+    "typecheck": "tsc --noEmit",
+    "build": "npm run typecheck && vite build",
+    "contracts": "cargo run -p app-core --example export_contracts",
+    "tauri": "tauri"
+  },
+  "dependencies": { "@tauri-apps/api": "^2", "react": "^19", "react-dom": "^19" },
+  "devDependencies": { "@tauri-apps/cli": "^2", "@types/react": "^19", "@types/react-dom": "^19", "typescript": "^5.9", "vite": "^7" }
+}

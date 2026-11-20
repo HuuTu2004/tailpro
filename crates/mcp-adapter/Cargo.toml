@@ -1,0 +1,15 @@
+[package]
+name = "tailpro-mcp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+app-protocol = { path = "../app-protocol" }
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+libc = "0.2"
+rmcp = { version = "=0.8.5", features = ["transport-io"] }
+futures-util = { version = "0.3", features = ["sink"] }
+tokio-util = { version = "0.7", features = ["codec"] }

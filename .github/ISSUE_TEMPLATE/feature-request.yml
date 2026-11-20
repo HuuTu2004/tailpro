@@ -1,0 +1,23 @@
+name: Feature request
+description: Describe a debugging workflow TailPro could support better.
+title: "[Feature]: "
+body:
+  - type: textarea
+    id: workflow
+    attributes:
+      label: What are you trying to do?
+      description: Describe a concrete debugging task and who it helps.
+    validations:
+      required: true
+  - type: textarea
+    id: limitation
+    attributes:
+      label: What gets in the way today?
+      description: Explain the current limitation and any workaround you use.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Suggested approach
+      description: Optional. Describe the behavior you would find useful and alternatives you considered.

@@ -1,0 +1,125 @@
+{
+  "project": "TailPro",
+  "version": "v1",
+  "status": "awaiting-design-approval",
+  "created": "2026-11-20",
+  "timezone": "Asia/Bangkok",
+  "delivery": {
+    "kind": "Local design handoff organized like a Figma project",
+    "entry": "index.html",
+    "native_figma_file": false,
+    "production_code_changed": false,
+    "images": "02-screens/board-v1.png",
+    "sample_data": true
+  },
+  "evidence": [
+    {
+      "file": "src/app/main.tsx",
+      "finding": "AI/MCP, discovery, service mappings, Trace and Topology precede LiveView in the same vertical workspace."
+    },
+    {
+      "file": "src/app/styles.css",
+      "finding": "Connections sidebar is always visible at 300px; log viewport has a fixed 468px height; text is often 9–11px."
+    },
+    {
+      "file": "src/features/connections/Connections.tsx",
+      "finding": "Add-connection form always occupies sidebar. Each host exposes environment select and disconnect action."
+    },
+    {
+      "file": "src/features/query/QueryBar.tsx",
+      "finding": "Query help and Saved Views share an expandable area; saving and managing views compete with help content."
+    },
+    {
+      "file": "src/features/live-view/LiveView.tsx",
+      "finding": "Existing bounded pages, pause, query, source scope and Inspector must retain their behavior."
+    }
+  ],
+  "decisions": [
+    "Ưu tiên bảng log, tận dụng chiều cao còn lại của cửa sổ thay vì cuộn qua các phần cấu hình.",
+    "Giữ theme tối và accent mint hiện tại. Chữ điều khiển 13–14px, log 12–13px.",
+    "Sidebar cây host/nguồn rộng 232–260px; thu gọn thành thanh 48px có tooltip và nút mở lại.",
+    "Logs, Trace và Topology là các tab cùng cấp, dùng chung scope nguồn. Đổi tab không tự Start, grant hay thay query.",
+    "Thêm kết nối, thêm nguồn, Inspector và Settings dùng một vùng panel bên phải; mỗi lúc chỉ một panel.",
+    "Giữ tiếng Anh trong mockup theo giao diện hiện có; bàn giao và giải thích bằng tiếng Việt.",
+    "Ảnh thể hiện bốn trạng thái chính, dữ liệu mẫu. Các trạng thái còn lại được quy định trong flow trước khi triển khai."
+  ],
+  "frames": [
+    {
+      "id": "01",
+      "name": "Focus on logs",
+      "rightPanel": null,
+      "state": "Following live",
+      "purpose": "Màn hình hằng ngày với sidebar gọn, tìm kiếm rõ và bảng log chiếm phần lớn diện tích."
+    },
+    {
+      "id": "02",
+      "name": "Add connection",
+      "rightPanel": "connection",
+      "state": "Following live",
+      "purpose": "Mở form khi bấm Add connection; trường nâng cao thu gọn; Connect là hành động tường minh."
+    },
+    {
+      "id": "03",
+      "name": "Inspect an event",
+      "rightPanel": "inspector",
+      "state": "Paused viewport; ingestion continues",
+      "purpose": "Chọn dòng để đọc fields/raw/stack, copy và thao tác trên event."
+    },
+    {
+      "id": "04",
+      "name": "Settings",
+      "rightPanel": "settings",
+      "state": "Following live",
+      "purpose": "AI & MCP và Service mappings có điều hướng riêng, chỉ hiện một nhóm cấu hình."
+    }
+  ],
+  "implementationPlan": [
+    {
+      "step": 1,
+      "name": "Chốt thiết kế",
+      "output": "Duyệt layout mặc định, màu, kích thước, quy tắc panel và các trạng thái. Chưa sửa src."
+    },
+    {
+      "step": 2,
+      "name": "Shell và navigation",
+      "output": "Tách AppShell, nguồn sidebar, tab Logs/Trace/Topology và right panel host; dùng state tường minh."
+    },
+    {
+      "step": 3,
+      "name": "Connections và Sources",
+      "output": "Chuyển form ra panel; danh sách host compact, actions trong menu. Add source chọn host rõ, nhập path hoặc Discover, sau đó Start."
+    },
+    {
+      "step": 4,
+      "name": "Log workspace và Inspector",
+      "output": "Toolbar ngắn, Saved Views/Columns dạng popover, table flex-height, Inspector tabs; giữ bounded cache/virtualization/cancel/pause."
+    },
+    {
+      "step": 5,
+      "name": "Settings và secondary actions",
+      "output": "Nhóm AI/MCP, service mappings và trợ giúp; export/explain giữ preview/consent riêng, không lồng nhiều dialog."
+    },
+    {
+      "step": 6,
+      "name": "Kiểm tra và bàn giao",
+      "output": "npm run typecheck; npm run build; manual native smoke với keyboard, responsive, SSH/source lifecycle, pause/query/scope và panel transitions. Không thêm automated tests."
+    }
+  ],
+  "acceptance": [
+    "Desktop 1440×900 và 1280×800: không cần cuộn trang để đến log; sidebar/table/panel cuộn độc lập.",
+    "Ở 1024px trở xuống, panel dùng sheet/dialog tối đa 92vw; không ép bảng log thành cột quá hẹp.",
+    "Các nút thường dùng cao 36–40px; icon button ít nhất 32px có accessible name và tooltip.",
+    "Text tương phản mục tiêu 4.5:1; focus visible. Trạng thái có tên/icon ngoài màu.",
+    "Escape đóng lớp trên cùng và trả focus về nút mở. Tab không đi vào nội dung bị che bởi modal.",
+    "Ctrl+K chuyển host/source; Ctrl+F focus query; Space pause/resume chỉ khi bảng focus; Enter mở event.",
+    "Dữ liệu và việc đọc nguồn tiếp tục khi đóng panel/sidebar hoặc chuyển tab. Không unmount mất query/pause/selection ngoài ý muốn.",
+    "Source health, gaps/reconnect và nhãn Production vẫn hiển thị cả khi query lọc hết các dòng.",
+    "Đổi scope/query tuân theo generation/cancel hiện có; kết quả cũ không ghi đè kết quả mới.",
+    "Bản bàn giao chỉ được dùng để triển khai sau khi người dùng duyệt thiết kế."
+  ],
+  "risks": [
+    "Unmount panel có thể làm mất draft hoặc hủy request chưa đúng; phải định nghĩa cleanup theo từng loại panel.",
+    "Trace/Topology hiện có state và native jobs riêng; chuyển tab cần cancel công việc phụ mà không dừng nguồn log.",
+    "Ảnh AI là định hướng thị giác, không phải chứng nhận accessibility hoặc file component Figma có thể chỉnh từng layer."
+  ]
+}

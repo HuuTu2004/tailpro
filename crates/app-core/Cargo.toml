@@ -1,0 +1,37 @@
+[package]
+name = "app-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+log-core = { path = "../log-core" }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+sha2 = "0.10"
+glob = "0.3"
+rand = "0.9"
+time = { version = "0.3", features = ["parsing", "formatting"] }
+
+app-protocol = { path = "../app-protocol" }
+regex = "1"
+libc = "0.2"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
+
+[features]
+manual-fixtures = []
+
+[[example]]
+name = "security_observations"
+required-features = ["manual-fixtures"]
+
+[[example]]
+name = "explain_observations"
+required-features = ["manual-fixtures"]
+
+[[example]]
+name = "production_observations"
+required-features = ["manual-fixtures"]
