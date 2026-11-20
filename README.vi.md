@@ -23,7 +23,9 @@ cargo build -p tailpro-desktop --features custom-protocol --locked
 
 Ứng dụng chỉ dùng host key đã được tin cậy trong OpenSSH. Import alias không chạy `ssh -G` hay Match exec. Config dynamic cần consent riêng cho session; không có arbitrary command input. SSH agent/IdentityAgent hiện có được dùng trực tiếp, không tạo daemon key manager.
 
-Connect host → Discover trong scope đã chọn hoặc nhập absolute file path → Start. Discovery đọc metadata; config reading có checkbox/roots riêng. Pin chỉ lưu đường dẫn đã mở thành công và không tự stream. Production là nhãn do user gắn, không thay quyền truy cập. Live viewer đọc từng page ≤200 rows/512 KiB; cache tối đa 2000 rows. Ctrl+K mở palette, Ctrl+F focus query; Space ở bảng pause/resume, Enter mở Inspector, Escape đóng panel.
+Connect host → Discover trong scope đã chọn hoặc nhập absolute file path → Start. Discovery đọc metadata; config reading có checkbox/roots riêng. Pin chỉ lưu đường dẫn đã mở thành công và không tự stream. Production là nhãn do user gắn, không thay quyền truy cập. Live viewer đọc từng page ≤200 rows/512 KiB; cache tối đa 2000 rows. Ctrl+K mở palette, Ctrl+F focus query; Space ở bảng pause/resume, Enter mở Inspector, Escape đóng panel. Bảng log và Event details chung một khung: chọn dòng rồi bấm Details hoặc Enter để mở; kéo divider chỉnh độ rộng, dùng scrollbar ngang ở đáy bảng cho dòng dài.
+
+Connections mở cửa sổ quản lý riêng. Thêm kết nối mở cửa sổ hệ điều hành riêng → nhập SSH alias/host → Test connection nếu cần → Save. Test dùng phiên tạm và không lưu; Save chỉ lưu profile, chưa kết nối hay Start log. Bấm Connect trên profile đã lưu để kết nối thật. Sources và công cụ điều tra ở màn hình log, còn nút bánh răng Settings mở cửa sổ cài đặt riêng.
 
 Settings lưu cục bộ, versioned/atomic, tối đa 1 MiB. Log retention và checkpoints ở RAM. SSH disconnect tự reconnect có giới hạn; Stop/Disconnect do user hủy retry. File rotation/truncate và continuity ambiguity có marker/quality. Replay Docker không hard-suppress nội dung trùng.
 

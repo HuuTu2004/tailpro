@@ -161,7 +161,7 @@ fn main_window(window: &tauri::WebviewWindow) -> Response<()> {
 }
 #[tauri::command]
 pub fn grants(window: tauri::WebviewWindow, app: State<'_, AppHandle>) -> Response<Vec<GrantInfo>> {
-    main_window(&window)?;
+    super::windows::settings_window(&window)?;
     Ok(app.grants())
 }
 #[tauri::command]
@@ -172,7 +172,7 @@ pub fn enroll(
     sources: Vec<String>,
     consent: bool,
 ) -> Response<Enrollment> {
-    main_window(&window)?;
+    super::windows::settings_window(&window)?;
     let directory = wire(app_core::application::bridge::runtime_dir())?;
     // An unavailable bridge cannot hand out usable enrollment secrets.
     wire(app_core::application::bridge::read_registry(
@@ -191,7 +191,7 @@ pub fn revoke(
     app: State<'_, AppHandle>,
     grant: String,
 ) -> Response<()> {
-    main_window(&window)?;
+    super::windows::settings_window(&window)?;
     app.revoke(&grant);
     Ok(())
 }
@@ -233,7 +233,7 @@ pub fn explain_provider(
     window: tauri::WebviewWindow,
     app: State<'_, AppHandle>,
 ) -> Response<Option<ExplainProvider>> {
-    main_window(&window)?;
+    super::windows::settings_window(&window)?;
     Ok(app.explain_provider())
 }
 #[tauri::command]
@@ -242,7 +242,7 @@ pub fn configure_explainer(
     app: State<'_, AppHandle>,
     provider: Option<ExplainProvider>,
 ) -> Response<()> {
-    main_window(&window)?;
+    super::windows::settings_window(&window)?;
     wire(app.configure_explainer(provider))
 }
 #[tauri::command]
@@ -251,7 +251,7 @@ pub async fn store_provider_key(
     app: State<'_, AppHandle>,
     key: String,
 ) -> Response<()> {
-    main_window(&window)?;
+    super::windows::settings_window(&window)?;
     wire(app.store_provider_key(key).await)
 }
 #[tauri::command]
@@ -301,7 +301,7 @@ pub async fn service_mappings(
     window: tauri::WebviewWindow,
     app: State<'_, AppHandle>,
 ) -> Response<Vec<ServiceMapping>> {
-    main_window(&window)?;
+    super::windows::settings_window(&window)?;
     let app = app.inner().clone();
     tauri::async_runtime::spawn_blocking(move || wire(app.service_mappings()))
         .await
@@ -313,7 +313,7 @@ pub async fn save_service_mapping(
     app: State<'_, AppHandle>,
     mapping: ServiceMapping,
 ) -> Response<()> {
-    main_window(&window)?;
+    super::windows::settings_window(&window)?;
     let app = app.inner().clone();
     tauri::async_runtime::spawn_blocking(move || wire(app.save_service_mapping(mapping)))
         .await
@@ -325,7 +325,7 @@ pub async fn delete_service_mapping(
     app: State<'_, AppHandle>,
     source: String,
 ) -> Response<()> {
-    main_window(&window)?;
+    super::windows::settings_window(&window)?;
     let app = app.inner().clone();
     tauri::async_runtime::spawn_blocking(move || wire(app.delete_service_mapping(&source)))
         .await
@@ -340,4 +340,48 @@ pub async fn topology_revision(
 ) -> Response<String> {
     main_window(&window)?;
     wire(app.topology_revision(request).await)
+}
+#[tauri::command]
+pub async fn test_connection(
+    window: tauri::WebviewWindow,
+    app: State<'_, AppHandle>,
+    profile: HostProfile,
+    consent: bool,
+) -> Response<()> {
+    super::windows::connections_window(&window)?;
+    app.test_connection(profile, consent)
+        .await
+        .map_err(|error| match error {
+            app_core::api::Error::Io(_) => {
+                "Could not reach the SSH host. Check hostname, port, network and SSH access.".into()
+            }
+            other => other.to_string(),
+        })
+}
+#[tauri::command]
+pub fn cancel_connection_test(
+    window: tauri::WebviewWindow,
+    app: State<'_, AppHandle>,
+) -> Response<()> {
+    super::windows::connections_window(&window)?;
+    app.cancel_connection_test();
+    Ok(())
+}
+#[tauri::command]
+pub async fn save_host_profile(
+    window: tauri::WebviewWindow,
+    desktop: tauri::AppHandle,
+    app: State<'_, AppHandle>,
+    profile: HostProfile,
+) -> Response<()> {
+    super::windows::connections_window(&window)?;
+    let app = app.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || wire(app.save_host_profile(profile)))
+        .await
+        .map_err(|_| "Profile worker stopped".to_string())??;
+    use tauri::{Emitter, Manager};
+    if let Some(connections) = desktop.get_webview_window("connections-manager") {
+        let _ = connections.emit("connection-profiles-changed", ());
+    }
+    Ok(())
 }

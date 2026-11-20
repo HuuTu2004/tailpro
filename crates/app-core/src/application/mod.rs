@@ -1,5 +1,6 @@
 mod agent_context;
 pub mod bridge;
+mod connection_profiles;
 mod explainer;
 mod output;
 pub mod policy;
@@ -62,6 +63,8 @@ pub struct AppHandle {
     settings: Arc<Mutex<SettingsStore>>,
     views: views::Views,
     output: output::Outputs,
+    connection_tests: Arc<tokio::sync::Semaphore>,
+    connection_test_cancel: Arc<Mutex<Option<CancellationToken>>>,
 }
 impl AppHandle {
     pub fn new(settings_path: PathBuf) -> Self {
@@ -75,6 +78,8 @@ impl AppHandle {
             engine: EngineWorker::start(cancel.clone()),
             views: views::Views::new(),
             output: output::Outputs::new(),
+            connection_tests: Arc::new(tokio::sync::Semaphore::new(1)),
+            connection_test_cancel: Arc::new(Mutex::new(None)),
             cancel,
             settings: Arc::new(Mutex::new(SettingsStore::new(settings_path))),
         }
@@ -113,10 +118,7 @@ impl AppHandle {
         self.connect_with_consent(profile, false).await
     }
     pub async fn connect_with_consent(&self, profile: HostProfile, consent: bool) -> Result<()> {
-        if profile.id.is_empty() || profile.id.len() > 128 || !config::valid_target(&profile.target)
-        {
-            return Err(Error::Invalid("host profile".into()));
-        }
+        crate::adapters::ssh::validate_profile(&profile)?;
         self.disconnect(&profile.id).await?;
         let mut state = self.state.lock().unwrap();
         if state.hosts.len() >= 3 {

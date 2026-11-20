@@ -1,6 +1,8 @@
-# Kế hoạch phát triển — 5 phase
+# Kế hoạch phát triển
 
 **Mỗi phase một file plan, các tính năng bên trong đánh số `1.1`, `1.2`, `2.1`…** Khi giao code, chọn đúng một mục để giữ scope; roadmap chỉ dùng quản lý thứ tự và gate.
+
+Năm phase ban đầu giữ nguyên phạm vi và gates. Phase 6 là plan bổ sung từ research ngày20/11/2026, **chưa triển khai**; có thể bắt đầu từ prerequisite phase1–4 đã sẵn sàng, không bắt buộc chờ release phase5. Plan không đồng nghĩa thay đổi behavior/contract đã có.
 
 | Phase | Plan | Phạm vi |
 | --- | --- | --- |
@@ -9,6 +11,7 @@
 | 3 | [AI-native, MCP và output an toàn](phase-03-ai-mcp-security.md) | 3.1–3.6: redaction, snapshot export, MCP/grants, read tools, observation cursor, Ollama/BYOK |
 | 4 | [Microservice và production debugging](phase-04-production-debugging.md) | 4.1–4.7: journal, error clusters, code hints, locate_service, trace/context, waterfall, topology |
 | 5 | [Tối ưu và phát hành Linux](phase-05-hardening-linux-release.md) | 5.1–5.5: packaging, performance, security/recovery, dùng thử, upgrade/rollout |
+| 6 — đề xuất | [Universal log ingestion](phase-06-universal-log-ingestion.md) | 6.1–6.12: raw fidelity, typed mapping, JSON/logfmt/header/multiline, rules, source continuity, diagnostics, measured optimization và Kubernetes gate riêng |
 
 ## Cách thực thi
 
@@ -25,6 +28,7 @@ Thiết kế chuẩn ở [architecture](../system-design/architecture.md) và [c
 - **Sau phase 3:** agent-ready alpha nội bộ khi hai clients dùng read tools/observation an toàn. Không cần model cho MCP; 3.6 opt-in có thể làm sau đường MCP nhưng cần xong trước khi công bố đủ bộ AI đã yêu cầu.
 - **Sau phase 4:** đủ production context, tổng tám MCP tools; waterfall/topology phân biệt evidence với inferred/configured hints.
 - **Sau phase 5:** phát hành AppImage/deb Linux với runtime/performance/security/upgrade evidence. Chỉ claim các feature/platform đã kiểm chứng.
+- **Phase 6:** Gate A cho universal core, Gate B riêng cho Kubernetes; custom rules và durability chỉ được claim sau mục/gate tương ứng. [Research nguồn chính thức](../system-design/universal-log-ingestion-research.md) giải thích các giới hạn upstream; không hứa zero-drop end-to-end/exactly-once từ RAM/SSH.
 
 ## Mục tiêu đo
 
@@ -44,4 +48,4 @@ Chạm cap phải trả partial/incomplete/error/gap phù hợp; drop im lặng 
 
 ## Backlog sau 5 phase
 
-macOS/Windows/native Keychain, interactive encrypted-key UX, PM2 daemon/bus, Compose recreate tracking, OR/NOT/regex/custom multiline và indexes/disk spill. Chưa chốt phase mới; chỉ lập plan khi chọn nhu cầu cụ thể có hardware/budgets/estimate/rollback. PM2 file discovery đã thuộc 1.7; thiếu Mac/signing không chặn Linux.
+macOS/Windows/native Keychain, interactive encrypted-key UX, PM2 daemon/bus, Compose recreate tracking và OR/NOT/regex query còn ở backlog. Custom parse rules/multiline được lập plan ở6.6–6.7; indexes chỉ xem xét sau số đo6.10, disk durability là feasibility optional6.11, chưa phải implementation đã cam kết. PM2 file discovery đã thuộc1.7; thiếu Mac/signing không chặn Linux. Chọn scope cụ thể có hardware/budgets/estimate/rollback trước khi code.

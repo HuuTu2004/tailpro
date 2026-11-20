@@ -4,14 +4,15 @@ import { useEffect, useRef, useState } from 'react';
 import { native } from '../../shared/client/native';
 import type { EventDetail, InspectorNode } from '../../shared/contracts/generated';
 type Branch = { path: number[]; nodes: InspectorNode[]; more: boolean };
-type Props = { sources: string[]; viewId: string; eventId: string; nextGeneration: () => number; close: () => void; select: (id: string) => void };
+type Props = { sources: string[]; viewId: string; eventId: string; nextGeneration: () => number; close: () => void; select: (id: string) => void; active?: boolean };
 const MAX_BYTES = 1024 * 1024;
-export function Inspector({ sources, viewId, eventId, nextGeneration, close, select }: Props) {
+export function Inspector({ sources, viewId, eventId, nextGeneration, close, select, active: visible = true }: Props) {
   const [detail, setDetail] = useState<EventDetail>();
   const [branches, setBranches] = useState<Record<string, Branch>>({});
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState('');
+  const [tab, setTab] = useState<'fields' | 'raw' | 'stack'>('fields');
   const active = useRef(0);
   const panel = useRef<HTMLElement>(null);
   const budget = useRef({ bytes: 0, nodes: 0 });
@@ -32,7 +33,7 @@ export function Inspector({ sources, viewId, eventId, nextGeneration, close, sel
   }
   useEffect(() => {
     setDetail(undefined); setBranches({}); setCopied(''); budget.current = { bytes: 0, nodes: 0 };
-    void load([], 0, true); panel.current?.focus();
+    void load([], 0, true); if (visible) panel.current?.querySelector<HTMLButtonElement>('[data-close-inspector]')?.focus();
     return () => { active.current = -1; void native.cancelDetail(viewId, nextGeneration()).catch(() => {}); };
   }, [viewId, eventId]);
   async function copy(text: string, label: string) {
@@ -50,12 +51,14 @@ export function Inspector({ sources, viewId, eventId, nextGeneration, close, sel
       </div>{branches[key] && renderBranch(child, depth + 1)}</li>;
     })}{branch.more && <li><button disabled={busy} onClick={() => void load(path, branch.nodes.length)}>Load next children (up to 200)</button></li>}</ul>;
   }
-  return <aside className="inspector" ref={panel} tabIndex={-1} aria-label="Event Inspector" onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); close(); } }}>
-    <div className="section-heading"><h2>Event Inspector</h2><button onClick={close} aria-label="Close Inspector">Close · Esc</button></div>
+  return <aside className="inspector" id="event-details-panel" ref={panel} tabIndex={-1} aria-label="Event Inspector" onKeyDown={e => { if (visible && e.key === 'Escape' && !document.querySelector('dialog[open]')) { e.stopPropagation(); close(); } }}>
+    <div className="section-heading"><h2>Event details</h2><div className="inspector-header-actions"><button data-close-inspector onClick={close} aria-label="Close event details" title="Close details · Esc">×</button></div></div>
     <p className="hint">{eventId} · Local copy only</p>{error && <p role="alert" className="notice">{error}</p>}{busy && <p role="status">Loading bounded detail…</p>}
-    {detail && <><p className="hint">{detail.quality}</p><h3>JSON fields</h3>{detail.json_error ? <p className="hint">{detail.json_error}</p> : renderBranch([])}
-      <IncidentExport sources={sources} eventIds={[eventId]}/><ExplainError eventId={eventId} sources={sources}/><h3>Raw text</h3><pre className="raw-text">{detail.raw}</pre>
-      {detail.group_id && <><h3>Stack group · retained parts</h3><p className="hint">Some parts may have expired from retention. {detail.group_parts_truncated ? 'Part list capped at 200.' : ''}</p><div className="stack-parts">{detail.group_parts.map((id, i) => <button key={id} disabled={id === eventId} onClick={() => select(id)}>Part {i + 1}</button>)}</div></>}
+    {detail && <><p className="hint">{detail.quality}</p><div className="inspector-tabs" aria-label="Event detail sections">{(['fields', 'raw', 'stack'] as const).map(value => <button key={value} aria-pressed={tab === value} onClick={() => setTab(value)}>{value === 'fields' ? 'Fields' : value === 'raw' ? 'Raw' : 'Stack'}</button>)}</div>
+      <div className="inspector-content">{tab === 'fields' && <>{detail.json_error ? <p className="hint">{detail.json_error}</p> : renderBranch([])}</>}
+      {tab === 'raw' && <><div className="section-heading"><h3>Raw text</h3><button disabled={detail.raw === null} onClick={() => void copy(detail.raw ?? '', 'Raw text copied')}>Copy raw</button></div><pre className="raw-text">{detail.raw}</pre></>}
+      {tab === 'stack' && (detail.group_id ? <><h3>Stack group · retained parts</h3><p className="hint">Some parts may have expired from retention. {detail.group_parts_truncated ? 'Part list capped at 200.' : ''}</p><div className="stack-parts">{detail.group_parts.map((id, i) => <button key={id} disabled={id === eventId} onClick={() => select(id)}>Part {i + 1}</button>)}</div></> : <p className="hint">This event has no retained stack group.</p>)}</div>
+      <div className="inspector-actions"><IncidentExport sources={sources} eventIds={[eventId]}/><ExplainError eventId={eventId} sources={sources}/></div>
     </>}{copied && <p role="status" className="hint">{copied}</p>}
   </aside>;
 }

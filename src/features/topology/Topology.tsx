@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { AppStatus, TopologyGraph } from '../../shared/contracts/generated';
 import { native } from '../../shared/client/native';
+import '../settings/tools.css';
 export function Topology({ status, hostId, selectSources }: { status?: AppStatus; hostId: string; selectSources: (sources: string[]) => void }) {
   const [view, setView] = useState('');
   const [files, setFiles] = useState('');
@@ -10,6 +11,8 @@ export function Topology({ status, hostId, selectSources }: { status?: AppStatus
   const [graph, setGraph] = useState<TopologyGraph>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [configure, setConfigure] = useState(false);
+  useEffect(() => { setConsent(false); }, [hostId]);
   const generation = useRef(0);
   const hostSources = status?.sources.filter(s => s.host_id === hostId).map(s => s.id) ?? [];
   const key = status?.sources.map(s => `${s.id}:${s.generation}`).join('|');
@@ -41,21 +44,30 @@ export function Topology({ status, hostId, selectSources }: { status?: AppStatus
     e.preventDefault(); const current = ++generation.current; setBusy(true); setGraph(undefined); setError('');
     try {
       const g = await native.topology({ view_id: view, generation: current, host_id: hostId, files: files.split('\n').filter(Boolean), roots: roots.split('\n').filter(Boolean), endpoint_names: names.split(',').map(s => s.trim()).filter(Boolean), consent, sources: hostSources });
-      if (current === generation.current) setGraph(g);
+      if (current === generation.current) { setGraph(g); setConfigure(false); }
     } catch (e) { if (current === generation.current) setError(String(e)); }
     finally { if (current === generation.current) setBusy(false); }
   }
   const visible = graph?.nodes ?? [];
-  return <details className="output-panel"><summary>Configured service topology</summary>
-    <form onSubmit={load}><p className="hint">Separate opt-in for exact Compose files on the selected host. Static block YAML/JSON subset; includes, interpolation and runtime environment remain unresolved. Existing discovery consent does not enable topology. Counts require an explicit source/service mapping.</p>
-      <div className="fields"><label>Exact Compose files, one per line<textarea value={files} onChange={e => setFiles(e.target.value)} maxLength={32768} required/></label><label>Approved roots, one per line<textarea value={roots} onChange={e => setRoots(e.target.value)} maxLength={32768} required/></label></div>
-      <label>Allowed literal endpoint names in Compose environment (optional, comma separated)<input value={names} onChange={e => setNames(e.target.value)} maxLength={2048}/></label>
-      <label className="check-row"><input type="checkbox" checked={consent} onChange={e => setConsent(e.target.checked)}/> Allow this bounded topology config read and metadata freshness checks; no .env/runtime env or execution</label>
-      <button disabled={!view || !hostId || !hostSources.length || !consent || busy}>Read topology</button>{busy && <button type="button" onClick={() => { generation.current++; void native.cancelPage(view, generation.current).catch(() => {}); setBusy(false); }}>Cancel</button>}
-    </form>
-    {error && <p role="alert">{error}</p>}
-    {graph && <><p className="hint">{graph.coverage} · Snapshot counts; approved config metadata checked every 15 seconds, changes require reread.</p>{!graph.complete && <p className="notice">Partial graph: {graph.reasons.join(' · ')}</p>}
-      <div className="topology-graph" role="list" aria-label="Service topology">{visible.map(node => <article role="listitem" className="topology-node" key={node.id}><button disabled={!node.sources.length} onClick={() => selectSources(node.sources)}>{node.id}</button><p>{node.observed_errors === null ? 'Error count unknown · no mapped source in selected scope' : `${node.observed_errors} retained observed errors · rate unknown`}</p><small>{node.provenance}</small>{graph.edges.filter(e => e.from === node.id).map((e, i) => <p key={i} className={e.kind === 'inferred' ? 'inferred-edge' : ''}>→ {e.to} · {e.kind}<br/><small>{e.provenance}</small></p>)}</article>)}</div>
-    </>}
-  </details>;
+  const host = status?.connections.find(c => c.host.id === hostId);
+  return <section className="tool-page" aria-label="Configured service topology">
+    <div className="tool-heading"><div><h2>Service topology</h2><p className="subtle">Explore configured service relationships on the selected host.</p></div>{host && <span className={`badge ${host.host.environment}`}>{host.host.target} · {host.host.environment}</span>}</div>
+    {!hostId && <div className="tool-empty"><h3>Choose a host first</h3><p>Select a connection to configure its service topology.</p></div>}
+    {hostId && !hostSources.length && <p className="notice">Start a source on this host before reading its topology.</p>}
+    {hostId && (!graph || configure) && <section className="tool-card tool-form"><h3>Approved configuration</h3><p className="hint">Separate opt-in for exact Compose files on this host. Static block YAML/JSON subset; includes, interpolation and runtime environment remain unresolved. Discovery consent does not enable topology.</p>
+      <form onSubmit={load}><fieldset disabled={busy} className="tool-fieldset">
+      <label>Exact Compose files · one per line<textarea value={files} onChange={e => { setFiles(e.target.value); setConsent(false); }} maxLength={32768} placeholder="/srv/app/compose.yaml" required/></label>
+      <label>Approved roots · one per line<textarea value={roots} onChange={e => { setRoots(e.target.value); setConsent(false); }} maxLength={32768} placeholder="/srv/app" required/></label>
+      <details className="tool-help"><summary>Optional endpoint hints</summary><label>Allowed literal endpoint names in Compose environment · comma separated<input value={names} onChange={e => { setNames(e.target.value); setConsent(false); }} maxLength={2048}/></label></details>
+      <label className="settings-check consent-row"><input type="checkbox" checked={consent} onChange={e => setConsent(e.target.checked)}/><span>Allow bounded reads and metadata freshness checks of these exact configuration files. No .env, runtime environment or execution.</span></label>
+      <button className="primary" disabled={!view || !hostId || !hostSources.length || !consent || busy || !files.trim()}>{busy ? 'Reading topology…' : 'Read topology'}</button>
+      </fieldset>{busy && <button type="button" onClick={() => { generation.current++; void native.cancelPage(view, generation.current).catch(() => {}); setBusy(false); }}>Cancel</button>}
+      </form></section>}
+    {error && <p role="alert" className="notice">{error}</p>}
+    {graph && <section className="tool-results" aria-label="Topology snapshot"><div className="section-heading"><h3>Configured relationships</h3><button onClick={() => setConfigure(true)}>Edit configuration</button></div><p className="hint">{graph.coverage} · Snapshot counts; approved config metadata checked every 15 seconds. Changes require a new read.</p>{!graph.complete && <p className="notice">Partial graph: {graph.reasons.join(' · ')}</p>}
+      {!visible.length && <div className="tool-empty"><h3>No services found in this snapshot</h3><p>Review the exact approved file paths and supported static Compose configuration.</p></div>}
+      <div className="topology-graph" role="list" aria-label="Service topology">{visible.map(node => <article role="listitem" className="topology-node" key={node.id}><button disabled={!node.sources.length} onClick={() => selectSources(node.sources)} title={node.sources.length ? 'Show these mapped sources in Logs' : 'No mapped sources'}>{node.id}</button><p>{node.observed_errors === null ? 'Error count unknown · no mapped source in selected scope' : `${node.observed_errors} retained observed errors · rate unknown`}</p><small>{node.provenance}</small>{graph.edges.filter(e => e.from === node.id).map((edge, i) => <p key={i} className={edge.kind === 'inferred' ? 'inferred-edge' : ''}>→ {edge.to} · {edge.kind}<br/><small>{edge.provenance}</small></p>)}</article>)}</div>
+      <p className="hint">Relationships are configured or inferred hints, not observed traffic. Counts require explicit source/service mappings. Select a mapped service to view its logs.</p>
+    </section>}
+  </section>;
 }

@@ -19,6 +19,10 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 
+// Cancelled local config reads may finish in the blocking pool; keep their
+// permits until the read ends so repeated tests cannot queue unbounded work.
+static CONNECT_CONFIG_READS: Semaphore = Semaphore::const_new(4);
+
 pub struct Session {
     pub profile: HostProfile,
     fingerprint: String,
@@ -32,33 +36,69 @@ pub struct Session {
     channels: Arc<Semaphore>,
     pub probes: Arc<Semaphore>,
 }
+pub(crate) fn validate_profile(profile: &HostProfile) -> Result<()> {
+    if profile.id.is_empty()
+        || profile.id.len() > 128
+        || profile.id.chars().any(char::is_control)
+        || !config::valid_target(&profile.target)
+        || profile.port == Some(0)
+        || profile
+            .user
+            .as_ref()
+            .is_some_and(|user| !config::valid_target(user))
+    {
+        return Err(Error::Invalid("invalid host profile".into()));
+    }
+    if let Some(agent) = &profile.identity_agent {
+        policy::path(agent)?;
+    }
+    Ok(())
+}
+
+struct PendingRuntime {
+    root: PathBuf,
+    armed: bool,
+}
+impl Drop for PendingRuntime {
+    fn drop(&mut self) {
+        if self.armed {
+            let _ = fs::remove_file(self.root.join("mux"));
+            let _ = fs::remove_file(self.root.join("config"));
+            let _ = fs::remove_dir(&self.root);
+        }
+    }
+}
 impl Session {
     pub async fn connect(
         profile: HostProfile,
         cancel: CancellationToken,
         consent: bool,
     ) -> Result<Self> {
-        if !config::valid_target(&profile.target)
-            || profile.id.len() > 128
-            || profile
-                .user
-                .as_ref()
-                .is_some_and(|u| !config::valid_target(u))
-        {
-            return Err(Error::Invalid("invalid host profile".into()));
+        validate_profile(&profile)?;
+        let config_permit = tokio::select! {
+            _ = cancel.cancelled() => return Err(Error::Cancelled),
+            permit = CONNECT_CONFIG_READS.acquire() => permit.map_err(|_| Error::Cancelled)?,
+        };
+        let manifest = tokio::select! {
+            _ = cancel.cancelled() => return Err(Error::Cancelled),
+            loaded = tokio::task::spawn_blocking(move || {
+                let _permit = config_permit;
+                config::load()
+            }) => loaded.map_err(|_| Error::Cancelled)??,
+        };
+        if cancel.is_cancelled() {
+            return Err(Error::Cancelled);
         }
-        if let Some(agent) = &profile.identity_agent {
-            policy::path(agent)?;
-        }
-        let manifest = tokio::task::spawn_blocking(config::load)
-            .await
-            .map_err(|_| Error::Cancelled)??;
         if manifest.needs_consent(&profile.target)? && !consent {
             return Err(Error::NeedsAction(manifest.disclosures.join("; ")));
         }
         let nonce: u64 = rand::random();
         let root = std::env::temp_dir().join(format!("tailpro-{}-{nonce:x}", std::process::id()));
         fs::DirBuilder::new().mode(0o700).create(&root)?;
+        let mut pending_runtime = PendingRuntime {
+            root: root.clone(),
+            armed: true,
+        };
         let config = root.join("config");
         let enforced = "Host *\n StrictHostKeyChecking yes\n UpdateHostKeys no\n ForwardAgent no\n Tunnel no\n GSSAPIDelegateCredentials no\n ForwardX11 no\n PermitLocalCommand no\n ClearAllForwardings yes\n RequestTTY no\n BatchMode yes\n ControlMaster no\n ControlPath none\n ConnectTimeout 10\n ServerAliveInterval 15\n ServerAliveCountMax 3\n";
         fs::write(&config, format!("{enforced}{}", manifest.text))?;
@@ -142,6 +182,7 @@ impl Session {
             channels: Arc::new(Semaphore::new(6)),
             probes: Arc::new(Semaphore::new(2)),
         };
+        pending_runtime.armed = false;
         let result = session.wait_ready().await;
         if let Err(error) = result {
             session.close().await;

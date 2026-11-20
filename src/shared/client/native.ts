@@ -1,8 +1,22 @@
 import type { ReadRequest, ReadResponse, ServiceMapping, TopologyRequest, TopologyGraph } from '../contracts/generated';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke as invokeNative } from '@tauri-apps/api/core';
 import type { GrantInfo, Enrollment, Selection, ExportFormat, PreparedPreview, ExplainProvider, Explanation } from '../contracts/generated';
 import type { AppStatus, ConfigImport, DiscoveryRequest, DiscoveryResult, HostProfile, Preview, SourceSpec, ViewRequest, ViewPage, ViewNotice, DetailRequest, EventDetail, SavedView } from '../contracts/generated';
+export const isPreview = import.meta.env.DEV && new URLSearchParams(location.search).get('preview') === '1';
+function invoke<T>(command: string, args?: Record<string, unknown>): Promise<T> {
+  if (isPreview && !['open_workspace_manager', 'close_workspace_manager', 'open_connection_editor', 'close_connection_editor'].includes(command)) {
+    return import('./preview').then(preview => preview.previewInvoke(command, args) as Promise<T>);
+  }
+  return invokeNative<T>(command, args);
+}
 export const native = {
+  openWorkspaceManager: (section: 'connections' | 'settings') => invoke<void>('open_workspace_manager', { section }),
+  closeWorkspaceManager: () => invoke<void>('close_workspace_manager'),
+  openConnectionEditor: () => invoke<void>('open_connection_editor'),
+  closeConnectionEditor: () => invoke<void>('close_connection_editor'),
+  testConnection: (profile: HostProfile, consent: boolean) => invoke<void>('test_connection', { profile, consent }),
+  cancelConnectionTest: () => invoke<void>('cancel_connection_test'),
+  saveHostProfile: (profile: HostProfile) => invoke<void>('save_host_profile', { profile }),
   debugRead: (viewId: string, generation: number, tool: string, request: ReadRequest) => invoke<ReadResponse>('debug_read', { viewId, generation, tool, request }),
   topologyRevision: (request: TopologyRequest) => invoke<string>('topology_revision', { request }),
   topology: (request: TopologyRequest) => invoke<TopologyGraph>('topology', { request }),

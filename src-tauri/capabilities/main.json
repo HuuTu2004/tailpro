@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main",
-  "description": "Bundled main window only. No shell, filesystem, HTTP or external URL plugins.",
-  "windows": ["main"],
+  "description": "Bundled main workspace and separate Connections and Settings windows. No shell, filesystem, HTTP or external URL plugins; window creation is native and allowlisted.",
+  "windows": ["main", "connections-manager", "settings-manager", "connection-editor"],
   "permissions": ["core:default"]
 }

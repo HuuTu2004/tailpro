@@ -135,6 +135,10 @@ UI có reserved CPU/memory nhưng không vô hạn: supersede/release generation
 
 ## Chính sách mở rộng feature
 
+Desktop dùng một runtime cho cửa sổ log chính và các cửa sổ hệ điều hành độc lập `connections-manager`, `settings-manager`, `connection-editor`. Mỗi cửa sổ có decorations, move/resize/minimize/maximize/close của hệ điều hành; New connection không còn là HTML dialog. Mỗi nút chỉ mở hoặc focus đúng cửa sổ của chức năng đó; không gộp hai chức năng vào một window. Trang chính chỉ có mục Connections; form, Settings và thông tin SSH nâng cao không xếp trên bảng log. Cửa sổ quản lý mở qua native command với route/label allowlist, không cấp quyền tạo webview hoặc mở URL tùy ý từ frontend. Export/Explain vẫn thuộc cửa sổ chính; grants/provider/mappings cho phép thêm đúng Settings window, còn test/save profile thuộc Connections/New connection windows. Save gửi thông báo cập nhật danh sách profile và đóng editor; Cancel/OS close hủy test và bỏ bản nháp. Đóng cửa sổ quản lý không disconnect hoặc Stop nguồn.
+
+`application/connection_profiles.rs` tách lưu profile khỏi kết nối. Test connection dùng một phiên SSH tạm, một permit và deadline 12 giây, cancel/cleanup có ownership; không sửa hosts/sources/grants/settings. Save chỉ gọi atomic settings store, Connect từ saved profile vẫn là thao tác riêng và consent SSH động không persist.
+
 Waterfall/topology/clusters dùng query/application pool và CPU permits hiện có; không tạo store, scheduler hoặc daemon mới. UI graph thuộc cùng 32 MiB cache, không thêm pool theo feature. Config/endpoint hints chỉ đi qua opt-in discovery capability; production labels không thay quyền backend. Graph/group limits và tool semantics ở [contracts](contracts.md).
 
 ## Chi tiết implementation phase 1

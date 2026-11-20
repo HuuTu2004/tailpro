@@ -4,6 +4,21 @@ use tauri::Manager;
 struct BridgeState(Mutex<Option<app_core::application::bridge::Bridge>>);
 pub fn run() {
     let app = tauri::Builder::default()
+        .on_window_event(|window, event| {
+            let app = window.app_handle();
+            match event {
+                tauri::WindowEvent::CloseRequested { api, .. }
+                    if window.label() == "main" && (app.get_webview_window("connections-manager").is_some() || app.get_webview_window("settings-manager").is_some() || app.get_webview_window("connection-editor").is_some()) =>
+                {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+                tauri::WindowEvent::Destroyed if matches!(window.label(), "connections-manager" | "settings-manager" | "connection-editor") => {
+                    super::windows::manager_closed(app, window.label());
+                }
+                _ => {}
+            }
+        })
         .setup(|app| {
             let settings = app.path().app_config_dir()?.join("settings.json");
             let core = AppHandle::new(settings);
@@ -14,6 +29,13 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            super::windows::open_workspace_manager,
+            super::windows::close_workspace_manager,
+            super::windows::open_connection_editor,
+            super::windows::close_connection_editor,
+            super::commands::test_connection,
+            super::commands::cancel_connection_test,
+            super::commands::save_host_profile,
             super::commands::debug_read,
             super::commands::topology,
             super::commands::topology_revision,

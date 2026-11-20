@@ -80,6 +80,8 @@ Khi giao code, chỉ định một mục, ví dụ `2.1`. Mục khác trong phas
 
 ## Gate kết thúc phase
 
+**UI refactor 20/11/2026:** Trang chính giữ bảng log, tìm kiếm và đúng mục Connections; Sources/Trace/Topology đóng/mở theo ngữ cảnh, Inspector không chồng với tool panel. Connections mở một cửa sổ native nhỏ, New connection có Test connection / Save / Cancel. Save không tự Connect; test không lưu profile hoặc thay đổi reader đang chạy. Bảng log và Event details dùng một khung chung: bảng mặc định full width, chọn dòng rồi bấm Details/Enter mới mở chi tiết, kéo divider để chia lại độ rộng, đóng chi tiết trả lại toàn bộ chiều rộng. Dòng dài có scrollbar ngang riêng và grid width theo nội dung. Nút Saved views được bỏ khỏi toolbar. Export/explain vẫn dùng dialog riêng, Escape/focus và cache/anchor được giữ. Đây là thay đổi UI cho 2.1–2.5 và quản lý profile của 1.2; không tự đóng các runtime gates bên dưới.
+
 Một incident có thể theo ID qua ba nguồn, lọc lỗi vẫn giữ stack, pause không giật anchor còn retained. UI không giữ cả buffer trong JS, bàn phím/focus hoạt động và có số đo frame/query. Đây là viewer nội bộ; chưa gọi agent-ready khi phase 3 chưa đạt.
 
 ## Tài liệu chuẩn khi code
