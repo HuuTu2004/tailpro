@@ -5,7 +5,7 @@ Cập nhật: 25/11/2026, Asia/Bangkok. Snapshot implementation tại workspace 
 | Mục | Trạng thái thực tế |
 | --- | --- |
 | Source cleanup | Runtime dùng native IPC và adapters thật; đã gỡ demo backend, fixtures/examples, synthetic source seeding và endpoint preview cũ. `npm run contracts` dùng generator trong app-protocol; số đo lịch sử không thay runtime gates |
-| Scope vừa triển khai | Phase6: original bytes/fragments, typed JSON/logfmt/header mapping, six-family multiline, manual parser rules, provenance/metrics/query coverage và scoped Kubernetes; simulation được user chấp thuận; các prerequisite/runtime gates trước đó giữ riêng |
+| Scope vừa triển khai | UI interface-refactors B1–B5 đã có code, browser review + native bundle smoke; [nghiệm thu UI](interface-refactors-acceptance.md) PARTIAL. Phase6: original bytes/fragments, typed JSON/logfmt/header mapping, six-family multiline, manual parser rules, provenance/metrics/query coverage và scoped Kubernetes; simulation được user chấp thuận; các prerequisite/runtime gates trước đó giữ riêng |
 | Code | Rust/Tauri/React viewer + Journal, tám MCP tools/schema 2, service mapping/code hints, trace duration/event UI và opt-in static topology |
 | Validation | Core/adapter/native clippy/build, frontend build; synthetic grouping/correlation/caps/ACK/Compose probes, raw MCP + Codex tools, Claude handshake; xem acceptance từng phase |
 | Phase gate | **PARTIAL — chưa fully accepted**; không coi feature code là runtime/release certification |
@@ -91,6 +91,14 @@ Xem [acceptance phase 1](phase-01-acceptance.md) để biết commands, version,
 
 ## Next action
 
+### Interface refactors B1–B5 — 25/11/2026
+
+Đã triển khai font Plex WOFF2/OFL cục bộ, token/base và primitives chung; row32px/header28px/geometry thống nhất, gutter mức độ, timestamp phân cấp, highlight literal/message và footer24px. Sidebar240px, tabs36px gạch chân; Connections/Settings ở tiện ích cuối sidebar. Inspector400px có Fields/Raw/Stack + More, row copy actions, resize pointer/keyboard/reset và focus restore. Connections/Sources/parser/Settings/Trace/Topology/export/Explain theo cùng palette/control, bỏ CSS cũ. Minimum main window800×600; backend/DTO/security/budgets không đổi.
+
+Frontend build/typecheck, desktop custom-protocol build và diff/docs checks PASS. Browser bốn kích thước với Inspector đóng/mở không page overflow; viewport679px ở1440×900 và547px ở1366×768, bỏ header vẫn đạt mục tiêu70%/65%. Test/Save không Connect, tab switch không Stop, × đúng reader; query/anchor expiry/reload, More/Evidence/Original bytes, clipboard arguments, pointer/keyboard resize, dialog/menu focus, reduced motion được quan sát qua adapter ngoài repo. Native bundle mở bằng config/runtime directory tạm, chưa đọc nguồn thật. Ảnh/specimen và chi tiết tại [interface acceptance](interface-refactors-acceptance.md).
+
+**Nghiệm thu PARTIAL:** synthetic UI review không thay log thật đã ẩn danh và loaded native matrix; native resize capture có stale/black backing nên không dùng làm pass. Probe cuộn production browser200 rows,3 lượt trước/sau đều p95≈16,7–16,8ms; heap biến thiên, chưa native sustained/RSS certification. Tô cấu trúc message tùy chọn deferred; cần reviewer độc lập, native accessibility/clipboard/scaling/zoom và nguồn thật. Không thêm automated tests/dependencies/demo runtime. Các mục dưới đây là lịch sử các đợt UI trước, không phải mô tả vị trí Settings hiện tại.
+
 ### Cây HOSTS và tab reader — 25/11/2026
 
 Shell đã thu gọn theo yêu cầu tiếp theo: bỏ hàng Logs/Sources/Investigate và mục Connections riêng, tab log một dòng nằm sát mép trên. Icon Settings ở góc phải thanh tab, + cạnh HOSTS vẫn mở Connections; menu ⋯ cuối navigator giữ công cụ phụ và palette. Review UI bằng adapter ngoài repo xác nhận tab strip top=0/height32px, tab31px, chỉ một Settings icon; tab trùng tên có host trên cùng dòng, tên khác nhau không thêm dòng phụ. Settings và + lần lượt gọi đúng section settings/connections; mở Trace qua menu phụ và Combine vẫn hoạt động. Layout900×600 khi paused không tràn ngang; frontend typecheck/build đạt.
@@ -114,3 +122,12 @@ Màn hình chính tập trung vào log, chỉ giữ mục Connections và bỏ c
 Các báo cáo acceptance lưu kết quả lịch sử, được đánh dấu rõ khi command/artifact đã bị loại bỏ. Các file nguồn UI đang phát triển (host log tree/source tabs), adapter Python chạy trên host thật và kiến trúc/bảo mật/grants không bị thay thế bằng stub. Cleanup không chứng nhận tương thích daemon/cluster hoặc readiness production; các runtime gates còn thiếu giữ nguyên.
 
 Validation sau cleanup: `cargo fmt --all -- --check`, scoped Clippy cho log-core/app-core/app-protocol/MCP/desktop (`--lib --bins --locked -- -D warnings`), `npm run contracts`, `npm run build`, và build desktop bundled-assets (`--features tailpro-desktop/custom-protocol`) cùng MCP đều PASS. Tất cả30 module TS/TSX/CSS còn lại có đường import từ entry chính; không còn mock/demo/synthetic source hook trong runtime. Sáu Python helper thật compile syntax trong bộ nhớ; local Markdown links/fences và `git diff --check` PASS. Xóa thêm~543MiB executable examples cũ trong target/debug/examples; dependency/incremental caches giữ nguyên. Không kết nối hoặc thay đổi cấu hình host thật trong đợt cleanup.
+
+
+## Tinh gọn menu và kết nối — 25/11/2026
+
+Theo yêu cầu mới, desktop đã gỡ menu ⋯ và cả4 mục Find host or log, Sources, Trace, Topology. Bỏ Ctrl+K, Discover sources tại host và lối mở Sources từ empty state; bỏ tool panel và CSS shell liên quan. Cây HOSTS vẫn thêm absolute file path mà chưa Start, double-click/Enter mới mở log; Ctrl+F, tabs/Combine, Inspector, Connections và Settings vẫn hoạt động. Đây là thay đổi bề mặt desktop; không xóa backend ingestion/discovery/trace/topology hoặc thay quyền/grants.
+
+Connections và + cạnh HOSTS mở thẳng native connection-editor với form SSH, không qua danh sách → Add. Hành động chính là Connect, không yêu cầu Save trước; API connect hiện có lưu profile và bắt đầu phiên, trạng thái/retry hiện trong cây HOSTS. Saved connection là dropdown điền form, chưa tự kết nối; Test connection vẫn riêng và không lưu profile/thay phiên đang chạy. Lỗi submit giữ bản nháp; Connect pending khóa input và chống submit trùng; Cancel không gọi Connect/Save. Settings vẫn mở cửa sổ riêng.
+
+Validation: npm run build (gồm typecheck) và git diff --check PASS. Manual browser smoke dùng adapter synthetic ngoài repo xác nhận4 mục/menu/tool panel đã mất; Ctrl+K không bị bắt, Ctrl+F focus query; thêm file không Start, Enter chỉ Start1 lần; Inspector mở/đóng; layout1280×840/800×600 không tràn ngang. Connections/+ gọi thẳng open_connection_editor, form autofocus hostname với nút Connect; Test chỉ gọi test_connection, lỗi Connect giữ hostname và không đóng form, command Connect được nhận mới gọi close_connection_editor. Saved profile chỉ điền form, consent mặc định false, pending khóa input/chống submit trùng và Cancel không Connect/Save. Form600×560/500×480 không tràn ngang, chiều dọc cuộn trong form. Không thêm automated tests; chưa kiểm chứng lại SSH trên host thật hoặc native window lifecycle trong đợt này.

@@ -1,0 +1,39 @@
+@font-face { font-family: 'IBM Plex Sans'; src: url('./fonts/IBMPlexSans-Regular.woff2') format('woff2'); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: 'IBM Plex Sans'; src: url('./fonts/IBMPlexSans-SemiBold.woff2') format('woff2'); font-weight: 600 700; font-style: normal; font-display: swap; }
+@font-face { font-family: 'IBM Plex Mono'; src: url('./fonts/IBMPlexMono-Regular.woff2') format('woff2'); font-weight: 400; font-style: normal; font-display: swap; }
+:root {
+  color-scheme: dark;
+  --font-ui: 'IBM Plex Sans', sans-serif;
+  --font-log: 'IBM Plex Mono', monospace;
+  --bg: #151719;
+  --surface: #1b1e21;
+  --surface-raised: #24282c;
+  --surface-hover: #2e3338;
+  --surface-selected: #30363b;
+  --text: #e6e8ea;
+  --muted: #a8afb6;
+  --border: #434b53;
+  --control-border: #7c858e;
+  --rule: #2c3237;
+  --accent: #9dc6bb;
+  --on-accent: #18231f;
+  --match-bg: #354b43;
+  --danger: #eea2a2;
+  --warning: #e4c18a;
+  --success: #a8c9ab;
+  --level-error: #eea2a2;
+  --level-warn: #e4c18a;
+  --level-info: #a8afb6;
+  --level-debug: #9aa7b5;
+  --level-trace: #a29eae;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --shadow-popup: 0 8px 24px #0006;
+}

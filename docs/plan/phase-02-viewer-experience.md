@@ -19,7 +19,9 @@ Khi giao code, chỉ định một mục, ví dụ `2.1`. Mục khác trong phas
 3. Giữ bounded page cache, release view/subscription khi đóng; expose source health/gap ngoài filtered rows và nhãn Production từ 1.8.
 4. Điều hướng kiểu DBeaver: cây HOSTS → log trong sidebar, thu gọn/mở rộng từng host và hiện số nguồn đã biết. Thêm đường dẫn tại host chỉ tạo mục trong phiên; double-click hoặc Enter mới gọi Start và mở/activate tab log. Double-click lại nguồn đang mở không tạo reader trùng. × trên tab gọi Stop; chuyển tab không Stop. Combine sources chọn ít nhất hai reader đang mở để xem chung, giữ nhóm khi chuyển qua tab đơn. Đóng hết tab giải phóng view, không fallback sang đọc toàn bộ retained logs. File mới có thể được lưu vào pinned paths sau khi thật sự streaming, theo policy hiện có; những source khác được nhớ trong phiên, không tự khôi phục reader sau restart. Source health/Columns vẫn riêng; không tự Discovery hoặc Connect khi chỉ mở cây.
 
-5. Shell gọn: tab log một dòng nằm sát trên cùng, không có hàng tiêu đề Logs hoặc mục Connections riêng. Chỉ hiện host cạnh tên tab khi tên log trùng; tooltip giữ host/path đầy đủ. Settings là icon nhỏ bên phải thanh tab; + ở HOSTS quản lý kết nối, menu ⋯ cuối navigator chứa công cụ ít dùng và palette.
+5. Shell gọn: tab log một dòng nằm sát trên cùng, không có hàng tiêu đề Logs; tiện ích quản lý ở cuối sidebar. Chỉ hiện host cạnh tên tab khi tên log trùng; tooltip giữ host/path đầy đủ. Connections mở thẳng form kết nối, Settings mở cửa sổ riêng từ cuối sidebar; + ở HOSTS cũng mở thẳng form, bỏ menu ⋯ và các mục Find host or log, Sources, Trace, Topology theo yêu cầu25/11/2026. Cây HOSTS giữ thêm file bằng absolute path; không còn nút Discover sources.
+
+Bề mặt theo [interface refactors B1–B5](interface-refactors.md): Plex local/token, row32px/header28px dùng chung geometry, severity gutter, timestamp phân cấp, search highlight và footer24px; Inspector400px Fields/Raw/Stack + More. [Nghiệm thu UI](../process/interface-refactors-acceptance.md) còn PARTIAL, không thay các gates nguồn thật dưới đây.
 
 **Xong khi:** Trace một ID qua ít nhất ba nguồn trên 2 host/4 sources; chỉ page cần thiết vào JS. Đo frame/serialization và freeze UI 30s không tăng queue vô hạn.
 
@@ -67,23 +69,23 @@ Khi giao code, chỉ định một mục, ví dụ `2.1`. Mục khác trong phas
 
 **Giới hạn:** Phím Space chỉ áp dụng khi focus phù hợp; shortcut routing chung ở 2.5.
 
-## 2.5 — Command palette và phím tắt
+## 2.5 — Phím tắt viewer
 
-**Đầu ra:** Chuyển host/source, tìm log và pause bằng bàn phím theo focus rõ ràng.
+**Đầu ra:** Điều hướng cây HOSTS/tab log, tìm log và pause bằng bàn phím theo focus rõ ràng. Quyết định25/11/2026 bỏ command palette và Ctrl+K khỏi desktop UI.
 
 **Dependency:** 1.7, 2.2, 2.4 · **Code:** `src/app/` shortcut routing, `src/shared/ui/`, existing feature public actions.
 
-1. Cmd/Ctrl+K mở palette chọn host/source; Cmd/Ctrl+F focus query, Escape đóng panel, Space pause khi viewport focus.
-2. Reuse source autocomplete/action API; chọn candidate không tự cấp quyền, action Start vẫn rõ ràng.
-3. Điều hướng keyboard/focus restore, accessible labels và shortcut help; dùng layout/platform modifiers.
+1. Cmd/Ctrl+F focus query, Escape đóng Inspector/dialog, Space pause khi viewport focus.
+2. Thêm absolute file path trong cây chỉ tạo mục; double-click/Enter mới Start. Không còn palette/autocomplete hoặc Sources/Trace/Topology panel trong desktop UI.
+3. Điều hướng keyboard/focus restore và accessible labels; dùng layout/platform modifiers.
 
-**Xong khi:** Thử Linux keyboard-only, text input không bị Space/global shortcut chiếm, focus sau dialog/cancel đúng; palette không tạo discovery requests vượt caps.
+**Xong khi:** Thử Linux keyboard-only, text input không bị Space/global shortcut chiếm, focus sau dialog/cancel đúng; Ctrl+K không mở palette hoặc gọi discovery.
 
 **Giới hạn:** macOS modifier mapping có thể thiết kế trước nhưng chỉ công bố runtime support sau platform gate.
 
 ## Gate kết thúc phase
 
-**UI refactor 20/11/2026:** Trang chính giữ bảng log, tìm kiếm và đúng mục Connections; Sources/Trace/Topology đóng/mở theo ngữ cảnh, Inspector không chồng với tool panel. Connections mở một cửa sổ native nhỏ, New connection có Test connection / Save / Cancel. Save không tự Connect; test không lưu profile hoặc thay đổi reader đang chạy. Bảng log và Event details dùng một khung chung: bảng mặc định full width, chọn dòng rồi bấm Details/Enter mới mở chi tiết, kéo divider để chia lại độ rộng, đóng chi tiết trả lại toàn bộ chiều rộng. Dòng dài có scrollbar ngang riêng và grid width theo nội dung. Nút Saved views được bỏ khỏi toolbar. Export/explain vẫn dùng dialog riêng, Escape/focus và cache/anchor được giữ. Đây là thay đổi UI cho 2.1–2.5 và quản lý profile của 1.2; không tự đóng các runtime gates bên dưới.
+**UI refactor 20/11/2026:** Trang chính giữ bảng log, tìm kiếm và đúng mục Connections; Theo quyết định25/11/2026, bỏ Find host or log (Ctrl+K), Sources/Trace/Topology và menu ⋯; Inspector không còn chia vùng với tool panel. Connections/+ mở thẳng cửa sổ native nhập SSH với Connect / Test connection / Cancel; không qua danh sách hoặc Save. Test không lưu profile hoặc thay đổi reader đang chạy; chọn saved profile chỉ điền form, Connect mới bắt đầu phiên. Bảng log và Event details dùng một khung chung: bảng mặc định full width, chọn dòng rồi bấm Details/Enter mới mở chi tiết, kéo divider để chia lại độ rộng, đóng chi tiết trả lại toàn bộ chiều rộng. Dòng dài có scrollbar ngang riêng và grid width theo nội dung. Nút Saved views được bỏ khỏi toolbar. Export/explain vẫn dùng dialog riêng, Escape/focus và cache/anchor được giữ. Đây là thay đổi UI cho 2.1–2.5 và quản lý profile của 1.2; không tự đóng các runtime gates bên dưới.
 
 Một incident có thể theo ID qua ba nguồn, lọc lỗi vẫn giữ stack, pause không giật anchor còn retained. UI không giữ cả buffer trong JS, bàn phím/focus hoạt động và có số đo frame/query. Đây là viewer nội bộ; chưa gọi agent-ready khi phase 3 chưa đạt.
 

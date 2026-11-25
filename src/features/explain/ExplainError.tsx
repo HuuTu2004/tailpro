@@ -1,3 +1,4 @@
+import { Button } from '../../shared/ui/Controls';
 import { useEffect, useRef, useState } from 'react';
 import { native } from '../../shared/client/native';
 import type { Explanation, ExplainProvider, PreparedPreview } from '../../shared/contracts/generated';
@@ -39,14 +40,14 @@ export function ExplainError({ eventId, sources }: { eventId: string; sources: s
     catch (e) { if (active.current === revision) { setMessage(String(e)); setPreview(undefined); setConsent(false); } }
     finally { if (active.current === revision) setBusy(false); }
   }
-  return <><button disabled={!sources.length} onClick={() => { setOpen(true); void prepare(); }}>Explain error</button>
+  return <><Button disabled={!sources.length} onClick={() => { setOpen(true); void prepare(); }}>Explain error</Button>
     {open && <WorkspaceDialog title="Explain error" close={close}>
       <p className="hint">Optional explanation of the selected event. Review the exact redacted payload and provider before sending.</p>
       {busy && <p role="status">Working…</p>}
-      {preview && <><p>{provider?.kind === 'ollama' ? 'Local Ollama inference' : 'BYOK cloud'} · {provider?.model}</p><p className="hint">{provider?.endpoint}</p><pre className="output-preview">{preview.payload}</pre><label className="consent-row"><input disabled={busy} type="checkbox" checked={consent} onChange={e => setConsent(e.target.checked)}/> Send these exact redacted bytes to this provider and model for explanation.</label><button className="primary" disabled={!consent || busy} onClick={() => void explain()}>Send preview for explanation</button></>}
+      {preview && <><p>{provider?.kind === 'ollama' ? 'Local Ollama inference' : 'BYOK cloud'} · {provider?.model}</p><p className="hint">{provider?.endpoint}</p><pre className="output-preview">{preview.payload}</pre><label className="consent-row"><input disabled={busy} type="checkbox" checked={consent} onChange={e => setConsent(e.target.checked)}/> Send these exact redacted bytes to this provider and model for explanation.</label><Button variant="primary" disabled={!consent || busy} onClick={() => void explain()}>Send preview for explanation</Button></>}
       {answer && <><h3>Selected evidence</h3><p>{answer.evidence.join(', ') || 'No retained evidence'}</p><h3>Model explanation / hypotheses · untrusted</h3><pre className="raw-text explanation-result">{answer.hypothesis}</pre><p className="hint">Model output is a hypothesis. No suggested action is executed.</p></>}
       {message && <p role="status" className="notice">{message}</p>}
-      {!preview && !busy && !answer && <button onClick={() => void prepare()}>Prepare preview again</button>}
+      {!preview && !busy && !answer && <Button onClick={() => void prepare()}>Prepare preview again</Button>}
     </WorkspaceDialog>}
   </>;
 }

@@ -1,11 +1,46 @@
-.connections-page{max-width:1100px;margin:0 auto}.connection-page-heading{margin-bottom:20px;align-items:flex-start}.connection-page-heading h2{margin:0}.connection-page-heading p{margin:6px 0 0}.connection-page-heading>.primary{flex-shrink:0}.connection-list,.saved-profile-section{margin-bottom:20px}.connection-list>.section-heading h3,.saved-profile-section h3{margin:0}.connection-row{display:flex;flex-wrap:wrap;align-items:center;gap:16px;padding:16px 0;border-bottom:1px solid var(--border)}.connection-row:last-child{border-bottom:0}.connection-row.is-selected{background:#14251f;border-radius:6px;padding:16px 12px;margin:0 -12px}.connection-select{display:flex;align-items:center;gap:12px;min-width:220px;flex:1;text-align:left;background:transparent;border:0;padding:4px 0}.connection-select:hover{background:transparent}.connection-select strong{display:block;font-size:14px;overflow-wrap:anywhere}.connection-select small{display:block;margin-top:4px;text-transform:none}.connection-select .badge{margin-left:auto}.connection-row-actions{display:flex;align-items:flex-end;gap:12px}.connection-row-actions>label{margin:0;font-size:11px}.connection-row-actions select{width:160px;margin-top:5px;padding:8px 10px}.connection-detail{width:100%;margin:0;padding-left:25px}.connection-advanced{padding:12px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);margin:18px 0 8px}.connection-consent{display:flex!important;gap:10px;align-items:flex-start;line-height:1.5}.connection-consent input{margin-top:4px!important;flex-shrink:0}.connection-consent small{display:block;margin-top:4px}.saved-profile-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-top:16px}.saved-profile{text-align:left;display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:16px}.saved-profile strong{flex:1;overflow-wrap:anywhere}.saved-profile small{width:100%;color:var(--accent)}.saved-ssh-options{margin-top:18px}.connection-safety{border-top:1px solid var(--border);padding-top:16px;margin-top:24px}.connection-composer-dialog{width:640px}.connection-draft-intro{margin:12px 0 18px}.connection-composer-dialog form>label{margin:14px 0}.connection-composer-dialog form>.fields>label{margin:0}.connection-dialog-actions{display:flex;align-items:center;gap:10px;margin-top:22px;padding-top:16px;border-top:1px solid var(--border)}.connection-dialog-actions>span{flex:1}.connection-test-progress,.connection-test-result{padding:12px 14px;border:1px solid var(--border);border-radius:6px;font-size:12px;line-height:1.65;overflow-wrap:anywhere}.connection-test-result.success{background:#142b22;border-color:#3e715c;color:#a0e7c8}.connection-test-result.failure{background:#382126;border-color:#84535b;color:#f3b4b2}.connection-test-progress{background:#152430;color:#b3d7f0}@media(max-width:760px){.connection-page-heading{flex-wrap:wrap}.connection-row-actions{width:100%}.connection-row-actions>label{flex:1}.connection-row-actions select{width:100%}.connection-select{min-width:0;width:100%}.connection-select .badge{max-width:40%;overflow-wrap:anywhere}.connection-row.is-selected{margin:0;padding:16px 8px}.connection-detail{padding-left:0}.connection-dialog-actions{flex-wrap:wrap}.connection-dialog-actions>span{display:none}.connection-dialog-actions>button{flex:1}}
-.connection-editor-shell{height:100dvh;min-height:400px;overflow:hidden;background:var(--surface)}
-.native-connection-editor{height:100%;overflow:auto;overscroll-behavior:contain;padding:18px 22px;background:var(--surface)}
-.native-connection-editor .connection-draft-intro{margin:0 0 18px;font-size:12px}
-.native-connection-editor form{display:flex;flex-direction:column;min-height:calc(100% - 40px)}
-.native-connection-editor form>label{margin:10px 0}
-.native-connection-editor .fields{flex-wrap:nowrap;gap:14px}
-.native-connection-editor .fields>label{flex:1;min-width:0;margin:10px 0}
-.native-connection-editor .connection-dialog-actions{position:sticky;bottom:-18px;background:var(--surface);margin-top:auto;padding:16px 0 0;flex-wrap:nowrap}
-.native-connection-editor .connection-dialog-actions>span{display:block;flex:1}
-.native-connection-editor .connection-dialog-actions>button{flex:none;min-width:75px}
+.connections-page { max-width: 1100px; margin: 0 auto; }
+.connection-page-heading { margin-bottom: 24px; align-items: flex-start; flex-wrap: wrap; }
+.connection-page-heading p { margin: 4px 0 0; }
+.connection-page-heading > button { flex-shrink: 0; }
+.connection-list, .saved-profile-section { margin-bottom: 24px; }
+.connection-list > .section-heading h3, .saved-profile-section h3 { margin: 0; }
+.connection-row { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 16px 0; border-bottom: 1px solid var(--rule); }
+.connection-row:last-child { border-bottom: 0; }
+.connection-row.is-selected { border-left: 2px solid var(--accent); padding-left: 12px; }
+.connection-select { justify-content: flex-start; gap: 12px; min-width: 0; flex: 1 1 200px; text-align: left; background: transparent; border: 0; padding: 4px 0; }
+.connection-select:hover { background: transparent; }
+.connection-select strong { display: block; font-size: 14px; overflow-wrap: anywhere; }
+.connection-select small { display: block; margin-top: 4px; }
+.connection-select .badge { margin-left: auto; }
+.connection-row-actions { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
+.connection-row-actions select { width: 144px; }
+.connection-detail { width: 100%; margin: 0; }
+.connection-advanced { padding: 8px 0; border-block: 1px solid var(--rule); margin: 16px 0 8px; }
+.connection-advanced > label { margin-block: 12px; }
+.connection-consent { display: flex; gap: 8px; align-items: flex-start; line-height: 1.5; }
+.connection-consent input { margin-top: 4px; flex-shrink: 0; }
+.connection-consent small { display: block; margin-top: 4px; }
+.saved-profile-grid { display: flex; flex-direction: column; margin-top: 16px; }
+.saved-profile { text-align: left; justify-content: flex-start; display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 16px 0; border: 0; border-bottom: 1px solid var(--rule); border-radius: 0; background: transparent; }
+.saved-profile strong { flex: 1; overflow-wrap: anywhere; }
+.saved-profile small { color: var(--text); }
+.saved-ssh-options { margin-top: 16px; }
+.connection-safety { border-top: 1px solid var(--border); padding-top: 12px; margin-top: 24px; }
+.connection-dialog-actions { display: flex; align-items: center; gap: 8px; margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border); }
+.connection-dialog-actions > span { flex: 1; }
+.connection-test-progress, .connection-test-result { padding: 12px; border-left: 2px solid var(--border); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.connection-test-result.success { color: var(--success); border-color: var(--success); }
+.connection-test-result.failure { color: var(--danger); border-color: var(--danger); }
+.connection-test-progress { color: var(--muted); }
+.connection-editor-shell { height: 100dvh; min-height: 320px; overflow: hidden; background: var(--surface); }
+.native-connection-editor { height: 100%; overflow: auto; overscroll-behavior: contain; padding: 24px; }
+.connection-draft-intro { margin: 0 0 16px; font-size: 12px; }
+.native-connection-editor form { display: flex; flex-direction: column; min-height: calc(100% - 40px); }
+.native-connection-editor form > label { margin: 0 0 12px; }
+.native-connection-editor .fields { margin: 0 0 12px; }
+.native-connection-editor button, .native-connection-editor input, .native-connection-editor select { min-height: 36px; }
+.native-connection-editor input[type=checkbox] { min-height: 0; }
+.native-connection-editor .connection-dialog-actions { position: sticky; bottom: -24px; background: var(--surface); margin-top: auto; padding-block: 16px; }
+.native-connection-editor .connection-dialog-actions > button { min-width: 80px; }
+.native-connection-editor .text-button { align-self: flex-start; }
+@media (max-width: 650px) { .connection-row-actions { width: 100%; } .connection-row-actions > label { flex: 1; } .connection-row-actions select { width: 100%; } .connection-select { width: 100%; } .connection-select .badge { max-width: 40%; white-space: normal; } }

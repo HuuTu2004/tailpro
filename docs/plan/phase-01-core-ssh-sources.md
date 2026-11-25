@@ -30,6 +30,7 @@ Khi giao code, chỉ định một mục, ví dụ `1.1`. Mục khác trong phas
 2. Dùng OpenSSH với ProxyJump, SSH Agent/IdentityAgent đã cấu hình; hỗ trợ 1Password hoặc key manager qua agent socket sẵn có, không cài/tạo daemon.
 3. Triển khai host-key/trust generation, auth states và ControlMaster thuộc app; invalidation khi config thay đổi.
 4. Thêm connect/disconnect, keepalive/backoff/NeedsAction, cancellation và kill/reap đúng owned children.
+5. UI25/11/2026: Connections/+ mở thẳng form SSH; Connect gọi API kết nối và lưu profile hiện có, không qua danh sách → Add → Save. Test là tùy chọn; saved profile chỉ điền form, không tự Connect; errors giữ bản nháp để sửa/retry.
 
 **Xong khi:** Thử alias, jump, agent socket, unknown/changed host key, config đổi và mất mạng; nhiều nguồn reuse master, stop không reconnect lại. Đo latency warm channel, không suy từ cold connect.
 

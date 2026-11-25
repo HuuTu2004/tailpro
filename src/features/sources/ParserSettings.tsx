@@ -1,3 +1,4 @@
+import { Button } from '../../shared/ui/Controls';
 import { useState } from 'react';
 import { native } from '../../shared/client/native';
 export function ParserSettings({ source }: { source: string }) {
@@ -21,7 +22,7 @@ export function ParserSettings({ source }: { source: string }) {
     <label>Configuration<textarea aria-label={`Parser config ${source}`} value={config} disabled={busy} maxLength={65536} onChange={event => { setConfig(event.target.value); setValidated(''); }}/></label>
     <p className="hint">A rule needs [[parse.rules]], id, source = "{source}", and pattern with named time/level/msg groups. Maximum 4 rules per source / 16 per workspace. Lookaround and backreferences are unsupported.</p>
     <label>Sample record<textarea value={sample} disabled={busy} maxLength={65536} onChange={event => setSample(event.target.value)}/></label>
-    <div className="actions"><button disabled={busy} onClick={() => void action(false)}>Preview</button><button disabled={busy || validated !== config} onClick={() => void action(true)}>Apply previewed configuration</button><button disabled={busy} onClick={() => { setConfig('version = 1\n[parse.profile]\nraw_only = true\n'); setValidated(''); }}>Prepare raw-only rollback</button></div>
+    <div className="actions"><Button disabled={busy} onClick={() => void action(false)}>Preview</Button><Button disabled={busy || validated !== config} onClick={() => void action(true)}>Apply previewed configuration</Button><Button disabled={busy} onClick={() => { setConfig('version = 1\n[parse.profile]\nraw_only = true\n'); setValidated(''); }}>Prepare raw-only rollback</Button></div>
     {error && <p role="alert" className="notice">{error}</p>}{preview && <pre className="raw-text">{preview}</pre>}
   </details>;
 }

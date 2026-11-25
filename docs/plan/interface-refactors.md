@@ -1,6 +1,6 @@
 # Kế hoạch giao diện TailPro: tinh gọn, có chủ ý
 
-Ngày 25/11/2026. Trạng thái: đề xuất, chưa triển khai. Kế thừa và điều chỉnh từ “TailPro interface refactor plan”.
+Ngày 25/11/2026. Trạng thái: đã triển khai phạm vi code B1–B5; nghiệm thu **PARTIAL**. Xem [hồ sơ trước/sau và giới hạn](../process/interface-refactors-acceptance.md). Kế thừa và điều chỉnh từ “TailPro interface refactor plan”.
 
 ## 1. Cách tiếp cận
 
@@ -102,6 +102,8 @@ Vòng focus phải đạt ít nhất 3:1 so với nền liền kề và nhìn th
 - **Sources và parser:** danh sách chọn nguồn rõ ràng, mỗi hàng một hành động. Tách khám phá, nhập đường dẫn thủ công và cấu hình connector. Lỗi quyền chặn không được giấu trong mục nâng cao.
 - **Settings, Trace, Topology, dialog:** dùng cùng kiểu chữ, kích thước điều khiển và đường kẻ. Không thiết kế lại mô hình sản phẩm của Trace và Topology. Dialog giữ `WorkspaceDialog` hiện có với chiều rộng 440/560/720px tùy loại.
 
+**Điều chỉnh phạm vi25/11/2026 theo yêu cầu:** gỡ menu ⋯ và Find host or log/Ctrl+K, Sources, Trace, Topology khỏi desktop UI; bỏ Discover sources và panel công cụ. Cây HOSTS vẫn thêm absolute file path và Start bằng double-click/Enter. Connections/+ mở thẳng form SSH có Connect, Test connection tùy chọn và Cancel; không còn bước danh sách → Add → Save. Các mục nghiệm thu B5 cho panel đã bỏ chỉ là evidence lịch sử.
+
 Các trạng thái rỗng, đang tải, lỗi, ngoại tuyến, tạm dừng và dữ liệu một phần giữ đúng bảng yêu cầu của plan cũ mục 8. Không biến dữ liệu thiếu thành kết quả rỗng thông thường.
 
 ## 8. Danh sách kiểm “không giống AI”
@@ -162,3 +164,10 @@ Bổ sung cho mục tiêu thị giác:
 ## 12. Việc đầu tiên
 
 Làm B1, rồi sang B2 ngay: chụp baseline và bộ log mẫu, đóng gói font, tạo token, sau đó áp gutter mức độ, timestamp phân cấp và trạng thái chọn lên bảng log. Xem kết quả trên ảnh chụp thật trước khi mở rộng sang phần còn lại của ứng dụng.
+
+
+## 13. Kết quả triển khai — 25/11/2026
+
+Đã áp font/token và primitives chung; bảng32px/header28px dùng geometry chung, gutter mức độ, timestamp phân cấp, highlight literal/message và status24px. Inspector400px có ba tab chính/More, row copy actions, resize/reset/focus; các cửa sổ quản lý và công cụ còn lại dùng cùng hệ thống. Connections/Settings ở cuối sidebar theo mục4; minimum desktop800×600. Không sửa backend hay thêm dependencies/tests.
+
+B1–B5 đã có code và browser smoke; build frontend và desktop bundled-assets PASS. Specimen HTML là artifact lịch sử hiện không còn trong repo; kết quả và giới hạn nằm ở [hồ sơ nghiệm thu](../process/interface-refactors-acceptance.md). Gate hình ảnh sơ bộ B2 đã xem được gutter/timestamp trên render, nhưng chưa thay nghiệm thu log thật/native. Tô cấu trúc message tùy chọn deferred; chưa có log thật đã ẩn danh, reviewer độc lập hoặc sustained native/RSS measurement. Không đánh dấu toàn bộ nghiệm thu mục10 đạt.

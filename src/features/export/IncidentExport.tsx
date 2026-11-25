@@ -1,3 +1,4 @@
+import { Button, Select } from '../../shared/ui/Controls';
 import { useEffect, useRef, useState } from 'react';
 import { native } from '../../shared/client/native';
 import type { ExportFormat, PreparedPreview } from '../../shared/contracts/generated';
@@ -42,15 +43,15 @@ export function IncidentExport({ sources, eventIds = [], query = '' }: Props) {
     } catch (e) { if (revision.current === current) { setPreview(undefined); setMessage(String(e)); } }
     finally { if (revision.current === current) setBusy(false); }
   }
-  return <><button className="incident-export-trigger" disabled={!sources.length} onClick={() => { setMessage(''); setOpen(true); }}>{eventIds.length ? 'Export event' : 'Export'}</button>{open && <WorkspaceDialog title="Export incident" close={close}>
+  return <><Button className="incident-export-trigger" disabled={!sources.length} onClick={() => { setMessage(''); setOpen(true); }}>{eventIds.length ? 'Export event' : 'Export'}</Button>{open && <WorkspaceDialog title="Export incident" close={close}>
     <p className="hint">{eventIds.length ? `${eventIds.length} selected event(s)` : `${sources.length} selected source(s)`} · Query: {query || '(all retained)'}. Redacted NDJSON or spreadsheet-safe CSV, including coverage and gaps.</p>
-    <label>Format<select disabled={busy} value={format} onChange={e => setFormat(e.target.value as ExportFormat)}><option value="ndjson">NDJSON</option><option value="csv">CSV</option></select></label>
+    <label>Format<Select disabled={busy} value={format} onChange={e => setFormat(e.target.value as ExportFormat)}><option value="ndjson">NDJSON</option><option value="csv">CSV</option></Select></label>
     <div className="fields"><label>Observed from · Unix ms<input disabled={busy} value={from} onChange={e => setFrom(e.target.value)} inputMode="numeric" placeholder="Optional"/></label><label>Observed to · Unix ms<input disabled={busy} value={to} onChange={e => setTo(e.target.value)} inputMode="numeric" placeholder="Optional"/></label></div>
-    <button disabled={busy} onClick={() => void prepare()}>{busy ? 'Working…' : 'Prepare exact preview'}</button>
+    <Button disabled={busy} onClick={() => void prepare()}>{busy ? 'Working…' : 'Prepare exact preview'}</Button>
     {preview && <><h3>Exact sanitized output</h3><p className="hint">Expires {new Date(Number(preview.expires_at_ms)).toLocaleTimeString()} · {preview.redaction_incomplete ? 'Some content could not be safely projected and was masked.' : 'Shared redaction applied.'}</p><pre className="output-preview">{preview.payload}</pre>
       <label>Absolute destination path<input disabled={busy} value={destination} onChange={e => setDestination(e.target.value)} placeholder="/home/user/incident.ndjson"/></label>
       <label className="consent-row"><input disabled={busy} type="checkbox" checked={overwrite} onChange={e => setOverwrite(e.target.checked)}/> Replace an existing file at this path</label>
-      <button className="primary" disabled={busy || !destination.startsWith('/')} onClick={() => void save()}>Save these exact bytes</button></>}
+      <Button variant="primary" disabled={busy || !destination.startsWith('/')} onClick={() => void save()}>Save these exact bytes</Button></>}
     {message && <p role="status" className="notice">{message}</p>}
   </WorkspaceDialog>}</>;
 }

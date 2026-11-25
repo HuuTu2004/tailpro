@@ -1,3 +1,4 @@
+import { Button } from '../../shared/ui/Controls';
 import { useState } from 'react';
 import type { AppStatus } from '../../shared/contracts/generated';
 import { AiSettings } from './AiSettings';
@@ -14,7 +15,7 @@ const tabs: { id: SettingsTab; title: string; description: string }[] = [
 export function Settings({ status }: { status?: AppStatus }) {
   const [tab, setTab] = useState<SettingsTab>('provider');
   return <div className="settings-layout">
-    <nav className="settings-navigation" aria-label="Settings sections">{tabs.map(item => <button key={item.id} className={tab === item.id ? 'active' : ''} aria-current={tab === item.id ? 'page' : undefined} onClick={() => setTab(item.id)}><strong>{item.title}</strong><small>{item.description}</small></button>)}</nav>
+    <nav className="settings-navigation" aria-label="Settings sections">{tabs.map(item => <Button key={item.id} className={tab === item.id ? 'active' : ''} aria-current={tab === item.id ? 'page' : undefined} onClick={() => setTab(item.id)}><strong>{item.title}</strong><small>{item.description}</small></Button>)}</nav>
     <div className="settings-content" id="settings-content">{tab === 'mappings' ? <ServiceMappings status={status}/> : <AiSettings key={tab} status={status} section={tab}/>}</div>
   </div>;
 }

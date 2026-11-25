@@ -1,3 +1,5 @@
+import { Icon } from '../../shared/ui/Icon';
+import { Button } from '../../shared/ui/Controls';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import type { ConnectionInfo, SourceInfo } from '../../shared/contracts/generated';
 import { native } from '../../shared/client/native';
@@ -13,11 +15,10 @@ type Props = {
   closing: Set<string>;
   selectHost: (id: string) => void;
   open: (source: LogSource) => void;
-  discover: (hostId: string) => void;
   manageConnections: () => void;
 };
 const HISTORY_LIMIT = 128;
-export function HostLogTree({ connections, sources, selectedHost, scope, opening, closing, selectHost, open, discover, manageConnections }: Props) {
+export function HostLogTree({ connections, sources, selectedHost, scope, opening, closing, selectHost, open, manageConnections }: Props) {
   const [known, setKnown] = useState<Map<string, LogSource>>(new Map());
   const [pins, setPins] = useState<Record<string, string[]>>({});
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -100,13 +101,13 @@ export function HostLogTree({ connections, sources, selectedHost, scope, opening
     if (!value.startsWith('/') || /[\r\n\0]/.test(value)) { setPathError('Enter an absolute log file path.'); return; }
     const entry: LogSource = { hostId: addingHost, spec: { kind: 'file', path: value } };
     const key = sourceKey(entry);
-    if (!entries.has(key) && known.size >= HISTORY_LIMIT) { setPathError('Too many remembered logs in this session. Use Sources to manage reading logs.'); return; }
+    if (!entries.has(key) && known.size >= HISTORY_LIMIT) { setPathError('Too many remembered logs in this session. Reopen a known log or restart the app to clear session history.'); return; }
     rememberAfterRead.current.add(key); setKnown(previous => new Map(previous).set(key, entry)); setFocused(key); setFilter(''); setAddingHost('');
     // Adding a tree entry grants no read permission. Double-click/Enter starts it.
   }
   return <section className="log-navigator" aria-label="Host log navigator">
-    <div className="log-navigator-heading"><h2>HOSTS</h2><button className="sidebar-add" title="Manage connections" aria-label="Manage connections" onClick={manageConnections}>+</button></div>
-    {(connections.length > 3 || entries.size > 6 || filter) && <div className="log-tree-search"><input value={filter} onChange={event => setFilter(event.target.value)} placeholder="Filter hosts or logs…" aria-label="Filter hosts or log paths"/>{filter && <button aria-label="Clear navigator filter" onClick={() => setFilter('')}>×</button>}</div>}
+    <div className="log-navigator-heading"><h2>HOSTS</h2><Button className="sidebar-add" title="Manage connections" aria-label="Manage connections" onClick={manageConnections}>+</Button></div>
+    {(connections.length > 3 || entries.size > 6 || filter) && <div className="log-tree-search"><label>Filter hosts or logs<input value={filter} onChange={event => setFilter(event.target.value)} placeholder="Filter hosts or logs…" aria-label="Filter hosts or log paths"/></label>{filter && <Button aria-label="Clear navigator filter" onClick={() => setFilter('')}>×</Button>}</div>}
     <div className="log-tree-hosts">
       {connections.filter(connection => !needle || connection.host.target.toLowerCase().includes(needle) || [...entries.values()].some(entry => entry.hostId === connection.host.id && `${sourcePath(entry.spec)} ${sourceLabel(entry.spec)}`.toLowerCase().includes(needle))).map(connection => {
         const host = connection.host;
@@ -116,19 +117,18 @@ export function HostLogTree({ connections, sources, selectedHost, scope, opening
         const isExpanded = expanded.has(host.id) || Boolean(needle);
         return <div className="log-tree-host" key={host.id}>
           <div className={'log-tree-host-heading' + (selectedHost === host.id ? ' selected' : '')}>
-            <button className="log-tree-host-toggle" aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${host.target} logs`} aria-expanded={isExpanded} title={`${host.target} · ${host.environment} · ${hostEntries.length} known logs`} onClick={() => { selectHost(host.id); setExpanded(previous => { const next = new Set(previous); if (isExpanded) next.delete(host.id); else next.add(host.id); return next; }); }}><span className="tree-chevron" aria-hidden="true">{isExpanded ? '▾' : '▸'}</span><span className={'dot ' + connection.state}/><strong>{host.target}</strong>{host.environment === 'production' && <span className="tree-prod" title="Production">●</span>}<span className="tree-log-count">{hostEntries.length}</span></button>
-            <button className="log-tree-add" aria-label={`Add log to ${host.target}`} title="Add a log path" onClick={() => startAdding(host.id)}>+</button>
+            <Button className="log-tree-host-toggle" aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${host.target} logs`} aria-expanded={isExpanded} title={`${host.target} · ${host.environment} · ${hostEntries.length} known logs`} onClick={() => { selectHost(host.id); setExpanded(previous => { const next = new Set(previous); if (isExpanded) next.delete(host.id); else next.add(host.id); return next; }); }}><span className="tree-chevron" aria-hidden="true"><Icon name={isExpanded ? 'chevron-down' : 'chevron-right'}/></span><span className={'dot ' + connection.state}/><strong>{host.target}</strong>{host.environment === 'production' && <span className="tree-prod" aria-label="Production" title="Production">●</span>}<span className="tree-log-count">{hostEntries.length}</span></Button>
+            <Button className="log-tree-add" aria-label={`Add log to ${host.target}`} title="Add a log path" onClick={() => startAdding(host.id)}>+</Button>
           </div>
           {isExpanded && <div className="log-tree-children" role="group" aria-label={`${host.target} logs`}>
             {visible.map(([key, entry]) => {
               const reading = active.get(key);
               const isOpening = opening.has(key);
               const isClosing = reading ? closing.has(reading.id) : false;
-              return <button className={'log-tree-source' + (reading && scope.includes(reading.id) ? ' active' : '') + (focused === key ? ' focused' : '')} key={key} title={`${sourcePath(entry.spec)}\n${isClosing ? 'Stopping…' : isOpening ? 'Starting…' : reading ? reading.state.replaceAll('_', ' ') : 'Double-click or press Enter to start reading'}`} aria-label={`${sourceLabel(entry.spec)} on ${host.target}${reading ? ', reading' : ', closed'}`} disabled={isOpening || isClosing} onClick={() => { setFocused(key); selectHost(host.id); }} onDoubleClick={() => open(entry)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); open(entry); } }}><span className={'tree-source-state' + (reading ? ' reading' : '')} aria-hidden="true">{isOpening || isClosing ? '…' : entry.spec.kind === 'file' ? '▤' : entry.spec.kind === 'journal' ? '≡' : '◈'}</span><span>{sourceLabel(entry.spec)}</span>{reading && <i className={'tree-reading-mark' + (/error|fail|needs_action/i.test(reading.state) ? ' attention' : '')} aria-label={reading.state}/>}</button>;
+              return <Button className={'log-tree-source' + (reading && scope.includes(reading.id) ? ' active' : '') + (focused === key ? ' focused' : '')} key={key} title={`${sourcePath(entry.spec)}\n${isClosing ? 'Stopping…' : isOpening ? 'Starting…' : reading ? reading.state.replaceAll('_', ' ') : 'Double-click or press Enter to start reading'}`} aria-label={`${sourceLabel(entry.spec)} on ${host.target}${host.environment === 'production' ? ', Production' : ''}${reading ? ', reading' : ', closed'}`} disabled={isOpening || isClosing} onClick={() => { setFocused(key); selectHost(host.id); }} onDoubleClick={() => open(entry)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); open(entry); } }}><span className={'tree-source-state' + (reading ? ' reading' : '')} aria-hidden="true">{isOpening || isClosing ? '…' : <Icon name={entry.spec.kind === 'file' ? 'sources' : entry.spec.kind}/>}</span><span>{sourceLabel(entry.spec)}</span>{reading && <i className={'tree-reading-mark' + (/error|fail|needs_action/i.test(reading.state) ? ' attention' : '')} aria-label={reading.state}/>}</Button>;
             })}
             {!visible.length && <p className="log-tree-empty">{needle ? 'No matching logs' : 'No logs added yet'}</p>}
-            {addingHost === host.id ? <form className="log-tree-path-form" onSubmit={addPath}><label>Add log path<input ref={pathInput} value={path} onChange={event => { setPath(event.target.value); setPathError(''); }} placeholder="/var/log/app.log" maxLength={4096} required aria-label={`New log path for ${host.target}`} onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); setAddingHost(''); } }}/></label><div><button type="button" onClick={() => setAddingHost('')}>Cancel</button><button className="primary" disabled={!path.trim().startsWith('/')}>Add</button></div>{pathError && <p role="alert">{pathError}</p>}<small>Double-click the added log to start reading.</small></form> : <button className="log-tree-add-path" onClick={() => startAdding(host.id)}>+ Add log</button>}
-            <button className="log-tree-discover" onClick={() => discover(host.id)}>Discover sources…</button>
+            {addingHost === host.id ? <form className="log-tree-path-form" onSubmit={addPath}><label>Add log path<input ref={pathInput} value={path} onChange={event => { setPath(event.target.value); setPathError(''); }} placeholder="/var/log/app.log" maxLength={4096} required aria-label={`New log path for ${host.target}`} onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); setAddingHost(''); } }}/></label><div><Button type="button" onClick={() => setAddingHost('')}>Cancel</Button><Button type="submit" variant="primary" disabled={!path.trim().startsWith('/')}>Add</Button></div>{pathError && <p role="alert">{pathError}</p>}<small>Double-click the added log to start reading.</small></form> : <Button className="log-tree-add-path" onClick={() => startAdding(host.id)}>+ Add log</Button>}
           </div>}
         </div>;
       })}

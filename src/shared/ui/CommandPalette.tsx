@@ -1,3 +1,4 @@
+import { Button } from './Controls';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { native } from '../client/native';
 import type { AppStatus, Candidate } from '../contracts/generated';
@@ -35,12 +36,12 @@ export function CommandPalette({ status, hostId, selectHost, selectSource, choos
     ...candidates.map(c => ({ key: c.id, title: `${c.path} · ${c.access}`, action: () => setChosen(c) })),
   ].slice(0, 32);
   return <dialog ref={dialog} className="command-palette" aria-label="Command palette" onCancel={e => { e.preventDefault(); close(); }} onClick={e => { if (e.target === e.currentTarget) close(); }}>
-    <h2>Switch host or source</h2><input ref={input} aria-label="Search host, source, or absolute path" role="combobox" aria-expanded="true" aria-controls="palette-results" aria-activedescendant={actions[active] ? `palette-${active}` : undefined} value={text} maxLength={4096} placeholder="Host, source, or /absolute/log/path" onChange={e => setText(e.target.value)} onKeyDown={e => {
+    <h2>Switch host or source</h2><label>Host, source, or absolute log path<input ref={input} aria-label="Search host, source, or absolute path" role="combobox" aria-expanded="true" aria-controls="palette-results" aria-activedescendant={actions[active] ? `palette-${active}` : undefined} value={text} maxLength={4096} placeholder="Host, source, or /absolute/log/path" onChange={e => setText(e.target.value)} onKeyDown={e => {
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); setActive(i => actions.length ? (i + (e.key === 'ArrowDown' ? 1 : actions.length - 1)) % actions.length : 0); }
       if (e.key === 'Enter' && actions[active]) { e.preventDefault(); actions[active].action(); }
     }}/>
-    <div id="palette-results" role="listbox" aria-label="Host and source candidates">{actions.map((action, i) => <button id={`palette-${i}`} key={action.key} role="option" aria-selected={i === active} className={i === active ? 'active' : ''} onClick={action.action}>{action.title}</button>)}</div>
-    {chosen && <div className="notice"><p>Selected: {chosen.path}. Reading begins only when you press Start.</p><div className="actions"><button onClick={() => { restore.current = false; choosePath(chosen.path); close(); }}>Use path in source form</button><button className="primary" disabled={chosen.access !== 'ready'} onClick={() => { run(() => native.start(hostId, chosen.provider === 'systemd_unit' ? { kind: 'journal', unit: chosen.path } : chosen.container_id ? { kind: 'docker', container_id: chosen.container_id, aliases: [chosen.path, ...chosen.tags].slice(0,16).map(s => s.slice(0,128)) } : { kind: 'file', path: chosen.path })); close(); }}>Start selected source</button></div></div>}
-    {error && <p role="alert" className="notice">{error}</p>}<p className="hint">Paths use the current host and bounded metadata autocomplete. Selecting a host never connects it. Selecting a file never starts it.</p><button onClick={close}>Close · Esc</button>
+    </label><div id="palette-results" role="listbox" aria-label="Host and source candidates">{actions.map((action, i) => <Button id={`palette-${i}`} key={action.key} role="option" aria-selected={i === active} className={i === active ? 'active' : ''} onClick={action.action}>{action.title}</Button>)}</div>
+    {chosen && <div className="notice"><p>Selected: {chosen.path}. Reading begins only when you press Start.</p><div className="actions"><Button onClick={() => { restore.current = false; choosePath(chosen.path); close(); }}>Use path in source form</Button><Button variant="primary" disabled={chosen.access !== 'ready'} onClick={() => { run(() => native.start(hostId, chosen.provider === 'systemd_unit' ? { kind: 'journal', unit: chosen.path } : chosen.container_id ? { kind: 'docker', container_id: chosen.container_id, aliases: [chosen.path, ...chosen.tags].slice(0,16).map(s => s.slice(0,128)) } : { kind: 'file', path: chosen.path })); close(); }}>Start selected source</Button></div></div>}
+    {error && <p role="alert" className="notice">{error}</p>}<p className="hint">Paths use the current host and bounded metadata autocomplete. Selecting a host never connects it. Selecting a file never starts it.</p><Button onClick={close}>Close · Esc</Button>
   </dialog>;
 }

@@ -27,19 +27,19 @@ It connects through **OpenSSH** and does not install a TailPro agent on your ser
 | Workflow | What TailPro provides |
 | --- | --- |
 | Connect to a host | SSH config aliases, existing SSH identities/agents, trusted host-key checks, and connection reuse. |
-| Find log sources | Scoped discovery of Docker containers and log files, explicit source selection, and pinned paths. |
+| Open log files | Add absolute file paths under a host, open them with double-click/Enter, and reuse pinned paths. |
 | Follow several sources | A combined log viewer, source health, pause/resume, and visible continuity or retention gaps. |
 | Investigate an event | Filters, Saved Views, and a JSON/raw Inspector with surrounding context. |
 | Share an incident | Preview redacted NDJSON or spreadsheet-safe CSV before exporting. |
 | Give a coding client context | A scoped MCP bridge with explicit source grants and eight scoped evidence tools (schema 2). |
 | Explore an explanation | Optional error explanations through local Ollama or a configured OpenAI-compatible BYOK endpoint. |
 
-These workflows have implementation and local validation evidence, with remaining integration work documented in the [status report](docs/process/current-status.md). Model inference and provider compatibility still need runtime validation. Microservice debugging now includes Journal, error clusters, service/code hints, trace events/durations and opt-in static topology; its runtime gates and Linux release hardening are tracked in the [roadmap](docs/plan/roadmap.md).
+These workflows have implementation and local validation evidence, with remaining integration work documented in the [status report](docs/process/current-status.md). Model inference and provider compatibility still need runtime validation. Backend microservice capabilities include Journal, error clusters, service/code hints, trace events/durations and opt-in static topology; Sources, Trace, Topology and the Ctrl+K palette have been removed from the desktop UI; its runtime gates and Linux release hardening are tracked in the [roadmap](docs/plan/roadmap.md).
 
 ## A typical session
 
-1. **Connect** to a host using your existing OpenSSH setup.
-2. **Discover** sources within a chosen scope, or enter an absolute file path.
+1. **Connect**: click Connections or + beside HOSTS, enter SSH details, and press Connect. Saved profiles can be selected in the same form; Test connection is optional.
+2. **Add a log** using the + next to a host and enter its absolute file path.
 3. **Start** the sources you want to follow.
 4. **Filter and inspect** events; pause the viewport when you need to read.
 5. **Export** a previewed, redacted incident or grant a compatible MCP client access to selected sources.
@@ -106,7 +106,7 @@ The current tools are `list_sources`, `get_recent_logs`, `search_logs`, `get_log
 
 The [MCP and AI acceptance notes](docs/process/phase-03-acceptance.md) cover onboarding, observation cursors, limits, and remaining client/provider checks. Detailed operational notes are also available in the [Vietnamese README](README.vi.md#ai--mcp-và-incident-output-phase-3).
 
-Journal requires Python 3, journalctl and permission to read the selected unit. Service mappings declare checkout hints without opening repositories. Trace bars use explicit durations; event-only logs remain markers. Topology requires separate exact-file/root consent and supports a static Compose subset; unresolved imports/variables and missing log coverage remain visible. See [Phase 4 acceptance](docs/process/phase-04-acceptance.md) for limits and remaining runtime checks.
+Journal requires Python 3, journalctl and permission to read the selected unit. Service mappings declare checkout hints without opening repositories. Trace and Topology panels were removed from the desktop UI on 25 November 2026; the underlying backend APIs remain. Backend topology requires separate exact-file/root consent and supports a static Compose subset; unresolved imports/variables and missing log coverage remain visible. See [Phase 4 acceptance](docs/process/phase-04-acceptance.md) for limits and remaining runtime checks.
 
 ## Help shape TailPro
 
