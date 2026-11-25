@@ -2,6 +2,8 @@
 
 Ngày 25/11/2026. Đây là thiết kế mục tiêu để review, chưa phải xác nhận tính năng đã triển khai. Cơ sở là [nghiên cứu nguồn chính thức](../system-design/microservice-debugging-ux-research.md). Các giới hạn code hiện tại không quyết định hình dạng sản phẩm.
 
+**Quyết định UI hiện tại:** Giữ bố cục quen thuộc kiểu DBeaver: cây HOSTS/log bên trái, double-click mở tab reader, × dừng reader, Combine chọn các tab theo ý người dùng. Panel hàng nguồn đã bỏ. Timeline/Incident desk/Service flow bên dưới là nghiên cứu bổ sung, không phải chỉ dẫn thay màn hình log bằng prototype. Hành vi đã làm và validation của cây/tab được ghi tại [phase2](phase-02-viewer-experience.md) và [current status](../process/current-status.md). Tham chiếu tree → editor: [DBeaver Basic operations](https://dbeaver.com/docs/dbeaver/Basic-operations/).
+
 ## 1. Mục tiêu và công việc chính
 
 Một công cụ để tìm hiểu chuyện gì xảy ra trong hệ thống đang vận hành: mở log nhanh, tìm lỗi, xem ngữ cảnh, lần theo request khi có bằng chứng và tới đúng service/instance cần kiểm tra. Cùng trải nghiệm cho app đơn, nhiều process/worker, microservices, containers, Kubernetes và nguồn telemetry tập trung/cloud. Hỗ trợ từng connector phải có ma trận khả năng kiểm chứng riêng; không tuyên bố mọi protocol/provider đã chạy.
@@ -86,4 +88,4 @@ Review tối thiểu: app đơn nhiều file; một service nhiều replica; req
 
 ## 8. Prototype tham khảo
 
-Các layout A/B/C là nghiên cứu giao diện trên branch riêng `prototype/microservice-debugging-ux`, không nằm trong runtime chính. Source tree chính đã gỡ demo IPC/fixtures trong đợt cleanup25/11/2026. Các thiết kế trong tài liệu này chưa được promote thành tính năng production; chạy hệ thống thật bằng desktop theo README.
+Các layout A/B/C là nghiên cứu giao diện trên branch riêng `prototype/microservice-debugging-ux`, không phải giao diện được chọn để thay màn hình chính. Runtime dùng cây HOSTS và tab reader theo mục cập nhật phía trên. Source tree chính đã gỡ demo IPC/fixtures trong đợt cleanup25/11/2026; không đưa switcher hoặc data mock của prototype vào ứng dụng. Các đề xuất request timeline/connectors trong tài liệu này chưa thành tính năng production; chạy hệ thống thật bằng desktop theo README.

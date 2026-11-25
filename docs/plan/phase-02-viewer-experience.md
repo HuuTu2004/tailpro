@@ -19,6 +19,8 @@ Khi giao code, chỉ định một mục, ví dụ `2.1`. Mục khác trong phas
 3. Giữ bounded page cache, release view/subscription khi đóng; expose source health/gap ngoài filtered rows và nhãn Production từ 1.8.
 4. Điều hướng kiểu DBeaver: cây HOSTS → log trong sidebar, thu gọn/mở rộng từng host và hiện số nguồn đã biết. Thêm đường dẫn tại host chỉ tạo mục trong phiên; double-click hoặc Enter mới gọi Start và mở/activate tab log. Double-click lại nguồn đang mở không tạo reader trùng. × trên tab gọi Stop; chuyển tab không Stop. Combine sources chọn ít nhất hai reader đang mở để xem chung, giữ nhóm khi chuyển qua tab đơn. Đóng hết tab giải phóng view, không fallback sang đọc toàn bộ retained logs. File mới có thể được lưu vào pinned paths sau khi thật sự streaming, theo policy hiện có; những source khác được nhớ trong phiên, không tự khôi phục reader sau restart. Source health/Columns vẫn riêng; không tự Discovery hoặc Connect khi chỉ mở cây.
 
+5. Shell gọn: tab log một dòng nằm sát trên cùng, không có hàng tiêu đề Logs hoặc mục Connections riêng. Chỉ hiện host cạnh tên tab khi tên log trùng; tooltip giữ host/path đầy đủ. Settings là icon nhỏ bên phải thanh tab; + ở HOSTS quản lý kết nối, menu ⋯ cuối navigator chứa công cụ ít dùng và palette.
+
 **Xong khi:** Trace một ID qua ít nhất ba nguồn trên 2 host/4 sources; chỉ page cần thiết vào JS. Đo frame/serialization và freeze UI 30s không tăng queue vô hạn.
 
 **Giới hạn:** Local ingest sequence quyết định thứ tự live; Inspector, pause và query nâng cao có mục riêng bên dưới.

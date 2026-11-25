@@ -68,7 +68,7 @@ export function Sources({ host, sources, requestedPath, run }: Props) {
     if (!host || host.state !== 'connected' || pending) return;
     const revision = hostRevision.current;
     setPending(label);
-    run(async () => { try { await native.start(host.host.id, spec); } finally { if (revision === hostRevision.current) setPending(''); } });
+    run(async () => { try { return await native.start(host.host.id, spec); } finally { if (revision === hostRevision.current) setPending(''); } });
   }
   function pinSource(source: SourceInfo) {
     if (source.spec.kind !== 'file') return;

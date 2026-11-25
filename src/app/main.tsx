@@ -16,10 +16,6 @@ import './styles.css';
 
 type Page = 'workspace' | 'connections' | 'settings' | 'new-connection';
 type Tool = 'sources' | 'trace' | 'topology';
-const pages: { id: Page; label: string }[] = [
-  { id: 'connections', label: 'Connections' },
-  { id: 'settings', label: 'Settings' },
-];
 const tools: { id: Tool; label: string; description: string }[] = [
   { id: 'sources', label: 'Sources', description: 'Add and manage log sources' },
   { id: 'trace', label: 'Trace', description: 'Find a request across sources' },
@@ -45,7 +41,6 @@ const route = new URLSearchParams(location.search);
 const managementWindow = route.has('manager');
 const connectionEditor = route.get('manager') === 'new-connection';
 const initialPage: Page = connectionEditor ? 'new-connection' : managementWindow ? route.get('manager') === 'settings' ? 'settings' : 'connections' : 'workspace';
-const navigationPages = managementWindow ? pages : pages.filter(item => item.id === 'connections');
 
 function App() {
   const [page, setPage] = useState<Page>(initialPage);
@@ -111,6 +106,10 @@ function App() {
     try {
       await native.stop(id);
       if (!alive.current) return;
+      const currentReaders = statusRef.current?.sources ?? [];
+      const index = currentReaders.findIndex(source => source.id === id);
+      const neighbor = [...currentReaders.slice(index + 1), ...currentReaders.slice(0, Math.max(0, index)).reverse()].find(source => source.id !== id && !closingRef.current.has(source.id));
+      setSelectedSources(previous => { const remaining = previous.filter(sourceId => sourceId !== id); return remaining.length ? remaining : neighbor ? [neighbor.id] : []; });
       setStatus(previous => previous ? { ...previous, sources: previous.sources.filter(source => source.id !== id) } : previous);
       await refreshStatus();
     } catch (reason) { if (alive.current) setError(String(reason)); }
@@ -166,7 +165,8 @@ function App() {
 
   async function run(action: () => Promise<unknown>) {
     setError('');
-    try { const result = await action(); const next = await refreshStatus(); if (typeof result === 'string' && next?.sources.some(source => source.id === result)) selectSourceTab(result); }
+    const revision = selectionRevision.current;
+    try { const result = await action(); const next = await refreshStatus(); if (revision === selectionRevision.current && typeof result === 'string' && next?.sources.some(source => source.id === result)) selectSourceTab(result); }
     catch (reason) { if (alive.current) setError(String(reason)); }
   }
   function changePage(next: Page) {
@@ -193,31 +193,15 @@ function App() {
 
   return <div className={'app-shell' + (managementWindow ? ' management-shell' : ' log-tree-shell')}>
     {!managementWindow && <aside className="app-sidebar">
-      <button className="brand" onClick={() => { if (managementWindow) setPage('connections'); else viewport.current?.focus(); }} aria-label="TailPro workspace"><span className="brand-symbol"><Icon name="workspace"/></span><span>TailPro</span></button>
-      <nav className="workspace-tabs" role={managementWindow ? 'tablist' : undefined} aria-label="Workspace management" aria-orientation={managementWindow ? 'vertical' : undefined} onKeyDown={event => {
-        if (!managementWindow || !['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
-        event.preventDefault();
-        const index = pages.findIndex(item => item.id === page);
-        const next = event.key === 'Home' ? 0 : event.key === 'End' ? pages.length - 1 : (index + (event.key === 'ArrowRight' || event.key === 'ArrowDown' ? 1 : -1) + pages.length) % pages.length;
-        changePage(pages[next].id); document.getElementById('tab-' + pages[next].id)?.focus();
-      }}>{navigationPages.map(item => <button key={item.id} id={'tab-' + item.id} role={managementWindow ? 'tab' : undefined} className={page === item.id ? 'is-selected' : ''} aria-haspopup={managementWindow ? undefined : 'dialog'} aria-label={item.label} title={item.label} tabIndex={!managementWindow || page === item.id ? 0 : -1} aria-selected={managementWindow ? page === item.id : undefined} aria-controls={managementWindow ? 'page-' + item.id : undefined} onClick={() => changePage(item.id)}><Icon name={item.id}/><span>{item.label}</span>{item.id === 'workspace' && <span className="sidebar-count">{status?.sources.length ?? 0}</span>}</button>)}</nav>
-      <HostLogTree connections={connections} sources={sources} selectedHost={selected} scope={scope} opening={opening} selectHost={setSelected} open={openTreeSource} discover={manageHostSources} manageConnections={() => changePage('connections')}/>
-      <div className="sidebar-session"><span className="local-session-mark"><Icon name="connections"/></span><div><strong>SSH sessions</strong><span>Read-only over SSH</span></div><span className="dot connected"/></div>
+      <HostLogTree connections={connections} sources={sources} selectedHost={selected} scope={scope} opening={opening} closing={closing} selectHost={setSelected} open={openTreeSource} discover={manageHostSources} manageConnections={() => changePage('connections')}/>
+      <div className="navigator-tools"><details className="navigator-more-tools"><summary aria-label="More tools" title="More tools">⋯</summary><div><button onClick={event => { event.currentTarget.closest('details')?.removeAttribute('open'); setPalette(true); }}><Icon name="search"/><span>Find host or log</span><kbd>Ctrl K</kbd></button>{tools.map(item => <button key={item.id} onClick={event => { const menu = event.currentTarget.closest('details'); const opener = menu?.querySelector('summary'); menu?.removeAttribute('open'); toggleTool(item.id, opener ?? event.currentTarget); }}><Icon name={item.id}/><span>{item.label}</span></button>)}</div></details></div>
     </aside>}
-    <header className="app-header">
-      <div className="page-title"><h1>{page === 'workspace' ? 'Logs' : page === 'connections' ? 'Connections' : 'Settings'}</h1></div>
-      <div className="app-header-actions">
-        {!managementWindow && page === 'workspace' && <div className="workspace-tool-buttons"><button className={tool === 'sources' ? 'active' : ''} aria-expanded={tool === 'sources'} aria-controls="workspace-tool-panel" onClick={event => toggleTool('sources', event.currentTarget)}><Icon name="sources"/>Sources<span className="tool-count">{status?.sources.length ?? 0}</span></button>
-        <details className="investigate-menu"><summary><Icon name="trace"/>Investigate<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" aria-hidden="true"><path d="m3 4.5 3 3 3-3"/></svg></summary><div className="investigate-options">{tools.filter(item => item.id !== 'sources').map(item => <button key={item.id} onClick={event => { const menu = event.currentTarget.closest('details'); const opener = menu?.querySelector('summary'); menu?.removeAttribute('open'); toggleTool(item.id, opener ?? event.currentTarget); }}><Icon name={item.id}/><span><strong>{item.label}</strong><small>{item.description}</small></span></button>)}</div></details></div>}
-        {!managementWindow && <><button className="icon-button" aria-label="Settings" title="Settings" onClick={() => void native.openWorkspaceManager('settings').catch(reason => setError(String(reason)))}><Icon name="settings"/></button><button className="quick-switch" onClick={() => setPalette(true)} title="Switch host or source · Ctrl K" aria-label="Switch host or source"><Icon name="search"/><kbd>Ctrl K</kbd></button></>}
-
-      </div>
-    </header>
+    {managementWindow && <header className="app-header"><div className="page-title"><h1>{page === 'connections' ? 'Connections' : 'Settings'}</h1></div></header>}
     {error && <div role="alert" className="error app-error"><span>{error}</span><button aria-label="Dismiss error" onClick={() => setError('')}>×</button></div>}
     <main className="app-main">
       {!managementWindow && <section className="workspace-page" id="page-workspace" role="region" aria-label="Live logs" hidden={page !== 'workspace' || managementWindow}>
         <div className={'workspace-body' + (tool ? ' has-tool' : '')}>
-          <div className="log-workspace">{!managementWindow && <LiveView onGetStarted={() => connections.length ? toggleTool('sources') : changePage('connections')} status={status} scope={scope} reading={scope.length > 0} sourceTabs={<SourceTabs status={status} scope={scope} combined={combinedSources} closing={closing} select={selectSourceTab} close={closeLog} combine={ids => { setScope(ids); setTool(null); }}/>} queryInput={queryInput} viewport={viewport} active={page === 'workspace'} inspectorVisible={!tool} onInspect={() => setTool(null)}/>}</div>
+          <div className="log-workspace">{!managementWindow && <LiveView onGetStarted={() => connections.length ? toggleTool('sources') : changePage('connections')} status={status} scope={scope} reading={scope.length > 0} sourceTabs={<SourceTabs settings={<button className="workspace-settings-button" aria-label="Settings" title="Settings" onClick={() => void native.openWorkspaceManager('settings').catch(reason => setError(String(reason)))}><Icon name="settings"/></button>} status={status} scope={scope} combined={combinedSources} closing={closing} select={selectSourceTab} close={closeLog} combine={ids => { setScope(ids); setTool(null); }}/>} queryInput={queryInput} viewport={viewport} active={page === 'workspace'} inspectorVisible={!tool} onInspect={() => setTool(null)}/>}</div>
           {page === 'workspace' && currentTool && <aside className="workspace-tool-panel" id="workspace-tool-panel" ref={panel} tabIndex={-1} aria-label={currentTool.label} onKeyDown={event => { if (event.key === 'Escape' && !event.defaultPrevented && !document.querySelector('dialog[open]')) { event.stopPropagation(); closeTool(); } }}>
             <div className="tool-panel-header"><div><Icon name={currentTool.id}/><strong>{currentTool.label}</strong></div><button className="icon-button" onClick={closeTool} title="Close tool · Escape" aria-label={'Close ' + currentTool.label}><Icon name="close"/></button></div>
             <div className="tool-panel-content">
@@ -228,8 +212,8 @@ function App() {
           </aside>}
         </div>
       </section>}
-      {managementWindow && page === 'connections' && <section className="standalone-page" id="page-connections" role="tabpanel" aria-labelledby="tab-connections"><Connections connections={connections} selected={selected} select={setSelected} run={run}/></section>}
-      {managementWindow && page === 'settings' && <section className="standalone-page" id="page-settings" role="tabpanel" aria-labelledby="tab-settings"><Settings status={status}/></section>}
+      {managementWindow && page === 'connections' && <section className="standalone-page" id="page-connections" role="region" aria-label="Connections"><Connections connections={connections} selected={selected} select={setSelected} run={run}/></section>}
+      {managementWindow && page === 'settings' && <section className="standalone-page" id="page-settings" role="region" aria-label="Settings"><Settings status={status}/></section>}
     </main>
     {palette && <CommandPalette status={status} hostId={selected} selectHost={setSelected} selectSource={selectSourceTab} choosePath={choosePath} close={() => setPalette(false)} run={run}/>}
     <footer className="app-footer"><span><span className="dot connected"/>Local-first<span className="footer-divider">·</span>No remote agent installed</span><span>{connections.length} host{connections.length === 1 ? '' : 's'} · {status?.sources.length ?? 0} sources</span></footer>

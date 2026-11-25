@@ -7,7 +7,7 @@
 .log-tree-host-heading { display:flex; align-items:center; border-radius:5px; border:1px solid transparent; }
 .log-tree-host-heading.selected { background:#1c242d; }
 .log-tree-host-heading:hover { background:#1d2831; }
-.log-tree-host-toggle { flex:1; justify-content:flex-start; gap:6px; min-width:0; padding:8px 3px; min-height:35px; border:0; background:transparent; font-size:11px; }
+.log-tree-host-toggle { flex:1; justify-content:flex-start; gap:6px; min-width:0; padding:8px 3px; min-height:35px; border:0; background:transparent; font-size:12px; }
 .log-tree-host-toggle:hover { background:transparent; }
 .log-tree-host-toggle strong { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:500; }
 .log-tree-host-toggle .dot { width:5px; height:5px; margin:0; flex-shrink:0; }
@@ -16,7 +16,7 @@
 .tree-log-count { color:#8fa0b2; font-size:10px; margin-left:auto; }
 .log-tree-add { width:23px; min-height:27px; padding:0; border:0; background:transparent; font-size:16px; color:#9cabb8; }
 .log-tree-children { padding:3px 0 3px 12px; margin-left:8px; border-left:1px solid #2d3b48; }
-.log-tree-source { display:flex; align-items:center; justify-content:flex-start; width:100%; min-height:31px; gap:7px; padding:6px 7px; border:1px solid transparent; border-radius:4px; background:transparent; font-size:11px; color:#b0becb; }
+.log-tree-source { display:flex; align-items:center; justify-content:flex-start; width:100%; min-height:31px; gap:7px; padding:6px 7px; border:1px solid transparent; border-radius:4px; background:transparent; font-size:12px; color:#b0becb; }
 .log-tree-source>span:nth-child(2) { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .log-tree-source:hover { border-color:transparent; background:#202b36; }
 .log-tree-source.active { background:#1c362e; color:var(--accent); }

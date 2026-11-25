@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { AppStatus } from '../../shared/contracts/generated';
 import { sourceLabel, sourcePath } from '../sources/source-labels';
 import { WorkspaceDialog } from './WorkspaceDialog';
@@ -6,6 +6,7 @@ import './source-tabs.css';
 
 type Props = {
   status?: AppStatus;
+  settings: ReactNode;
   scope: string[];
   combined: string[];
   closing: Set<string>;
@@ -13,7 +14,10 @@ type Props = {
   close: (id: string) => void;
   combine: (ids: string[]) => void;
 };
-export function SourceTabs({ status, scope, combined, closing, select, close, combine }: Props) {
+export function SourceTabs({ status, settings, scope, combined, closing, select, close, combine }: Props) {
+  const tabsRef = useRef<HTMLDivElement>(null);
+  const scopeKey = scope.join('|');
+  useEffect(() => { tabsRef.current?.querySelector('[role=tab][aria-selected=true]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' }); }, [scopeKey]);
   const [composer, setComposer] = useState(false);
   const [draft, setDraft] = useState<string[]>([]);
   const [search, setSearch] = useState('');
@@ -23,7 +27,7 @@ export function SourceTabs({ status, scope, combined, closing, select, close, co
   const chosen = draft.filter(id => readableIds.has(id));
   const hostName = (hostId: string) => status?.connections.find(connection => connection.host.id === hostId)?.host.target ?? hostId;
   return <div className="source-tabs-bar">
-    <div className="source-editor-tabs" role="tablist" aria-label="Open log readers" onKeyDown={event => {
+    <div className="source-editor-tabs" ref={tabsRef} role="tablist" aria-label="Open log readers" onKeyDown={event => {
       const tab = (event.target as HTMLElement).closest('[role=tab]');
       if (!tab || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
       event.preventDefault();
@@ -34,12 +38,12 @@ export function SourceTabs({ status, scope, combined, closing, select, close, co
     }}>
       {group.length > 1 && <button role="tab" className={'combined-log-tab' + (scope.length > 1 ? ' active' : '')} aria-selected={scope.length > 1} tabIndex={scope.length > 1 ? 0 : -1} onClick={() => combine(group)}>Combined <span>{group.length}</span></button>}
       {sources.map(source => <div className={'source-editor-tab' + (scope.length === 1 && scope[0] === source.id ? ' active' : '')} key={source.id} role="presentation">
-        <button role="tab" aria-selected={scope.length === 1 && scope[0] === source.id} tabIndex={scope.length === 1 && scope[0] === source.id ? 0 : -1} title={`${hostName(source.host_id)} · ${sourcePath(source.spec)} · ${source.state.replaceAll('_', ' ')}`} onClick={() => select(source.id)}><span>{sourceLabel(source.spec)}</span><small>{hostName(source.host_id)}</small></button>
+        <button role="tab" aria-selected={scope.length === 1 && scope[0] === source.id} tabIndex={scope.length === 1 && scope[0] === source.id ? 0 : -1} title={`${hostName(source.host_id)} · ${sourcePath(source.spec)} · ${source.state.replaceAll('_', ' ')}`} onClick={() => select(source.id)}><span>{sourceLabel(source.spec)}</span>{sources.some(other => other.id !== source.id && sourceLabel(other.spec) === sourceLabel(source.spec)) && <small>· {hostName(source.host_id)}</small>}</button>
         <button className="source-tab-close" disabled={closing.has(source.id)} title="Close tab and stop reading this log" aria-label={`Stop reading ${sourceLabel(source.spec)} on ${hostName(source.host_id)}`} onClick={() => close(source.id)}>{closing.has(source.id) ? '…' : '×'}</button>
       </div>)}
-      {!sources.length && <span className="source-tabs-empty">Double-click a log in HOSTS to open it.</span>}
+      {!sources.length && <span className="source-tabs-empty">No logs open</span>}
     </div>
-    <button className={'combine-open-logs' + (scope.length > 1 ? ' active' : '')} disabled={sources.length < 2} title={sources.length < 2 ? 'Open at least two logs to combine them' : 'Choose which open logs to read together'} aria-haspopup="dialog" onClick={() => { setDraft(group.length > 1 ? group : scope); setSearch(''); setComposer(true); }}>Combine sources</button>
+    <div className="source-tab-actions"><button className={'combine-open-logs' + (scope.length > 1 ? ' active' : '')} disabled={sources.length < 2} title={sources.length < 2 ? 'Open at least two logs to combine them' : 'Choose which open logs to read together'} aria-label="Combine sources" aria-haspopup="dialog" onClick={() => { setDraft(group.length > 1 ? group : scope); setSearch(''); setComposer(true); }}>Combine</button>{settings}</div>
     {composer && <WorkspaceDialog title="Combine logs" close={() => setComposer(false)} className="combine-log-dialog">
       <p>Choose the open logs you want to view together.</p>
       {sources.length > 5 && <label>Find a log<input autoFocus value={search} onChange={event => setSearch(event.target.value)} placeholder="Host or log name…"/></label>}

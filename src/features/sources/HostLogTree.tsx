@@ -10,13 +10,14 @@ type Props = {
   selectedHost: string;
   scope: string[];
   opening: Set<string>;
+  closing: Set<string>;
   selectHost: (id: string) => void;
   open: (source: LogSource) => void;
   discover: (hostId: string) => void;
   manageConnections: () => void;
 };
 const HISTORY_LIMIT = 128;
-export function HostLogTree({ connections, sources, selectedHost, scope, opening, selectHost, open, discover, manageConnections }: Props) {
+export function HostLogTree({ connections, sources, selectedHost, scope, opening, closing, selectHost, open, discover, manageConnections }: Props) {
   const [known, setKnown] = useState<Map<string, LogSource>>(new Map());
   const [pins, setPins] = useState<Record<string, string[]>>({});
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -122,7 +123,8 @@ export function HostLogTree({ connections, sources, selectedHost, scope, opening
             {visible.map(([key, entry]) => {
               const reading = active.get(key);
               const isOpening = opening.has(key);
-              return <button className={'log-tree-source' + (reading && scope.includes(reading.id) ? ' active' : '') + (focused === key ? ' focused' : '')} key={key} title={`${sourcePath(entry.spec)}\n${isOpening ? 'Starting…' : reading ? reading.state.replaceAll('_', ' ') : 'Double-click or press Enter to start reading'}`} aria-label={`${sourceLabel(entry.spec)} on ${host.target}${reading ? ', reading' : ', closed'}`} disabled={isOpening} onClick={() => { setFocused(key); selectHost(host.id); }} onDoubleClick={() => open(entry)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); open(entry); } }}><span className={'tree-source-state' + (reading ? ' reading' : '')} aria-hidden="true">{isOpening ? '…' : entry.spec.kind === 'file' ? '▤' : entry.spec.kind === 'journal' ? '≡' : '◈'}</span><span>{sourceLabel(entry.spec)}</span>{reading && <i className={'tree-reading-mark' + (/error|fail|needs_action/i.test(reading.state) ? ' attention' : '')} aria-label={reading.state}/>}</button>;
+              const isClosing = reading ? closing.has(reading.id) : false;
+              return <button className={'log-tree-source' + (reading && scope.includes(reading.id) ? ' active' : '') + (focused === key ? ' focused' : '')} key={key} title={`${sourcePath(entry.spec)}\n${isClosing ? 'Stopping…' : isOpening ? 'Starting…' : reading ? reading.state.replaceAll('_', ' ') : 'Double-click or press Enter to start reading'}`} aria-label={`${sourceLabel(entry.spec)} on ${host.target}${reading ? ', reading' : ', closed'}`} disabled={isOpening || isClosing} onClick={() => { setFocused(key); selectHost(host.id); }} onDoubleClick={() => open(entry)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); open(entry); } }}><span className={'tree-source-state' + (reading ? ' reading' : '')} aria-hidden="true">{isOpening || isClosing ? '…' : entry.spec.kind === 'file' ? '▤' : entry.spec.kind === 'journal' ? '≡' : '◈'}</span><span>{sourceLabel(entry.spec)}</span>{reading && <i className={'tree-reading-mark' + (/error|fail|needs_action/i.test(reading.state) ? ' attention' : '')} aria-label={reading.state}/>}</button>;
             })}
             {!visible.length && <p className="log-tree-empty">{needle ? 'No matching logs' : 'No logs added yet'}</p>}
             {addingHost === host.id ? <form className="log-tree-path-form" onSubmit={addPath}><label>Add log path<input ref={pathInput} value={path} onChange={event => { setPath(event.target.value); setPathError(''); }} placeholder="/var/log/app.log" maxLength={4096} required aria-label={`New log path for ${host.target}`} onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); setAddingHost(''); } }}/></label><div><button type="button" onClick={() => setAddingHost('')}>Cancel</button><button className="primary" disabled={!path.trim().startsWith('/')}>Add</button></div>{pathError && <p role="alert">{pathError}</p>}<small>Double-click the added log to start reading.</small></form> : <button className="log-tree-add-path" onClick={() => startAdding(host.id)}>+ Add log</button>}
