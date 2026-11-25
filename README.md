@@ -66,7 +66,7 @@ npm run tauri dev
 Build native packages on the target OS:
 
 ```bash
-npm run tauri build -- --locked
+npm run tauri -- build -- --locked
 cargo build -p tailpro-mcp --release --locked
 ```
 

@@ -141,7 +141,7 @@ impl AskpassBridge {
                     continue;
                 }
                 let hint = request["hint"].as_str().unwrap_or("");
-                let fingerprint = if hint == "confirm"
+                let fingerprint = if prompt.starts_with("The authenticity of host ")
                     && prompt.contains("key fingerprint")
                     && prompt.contains("continue connecting")
                 {

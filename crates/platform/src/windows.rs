@@ -48,8 +48,11 @@ pub fn protect(path: &Path, directory: bool) -> io::Result<()> {
         while *text.add(len) != 0 {
             len += 1;
         }
-        let sid = String::from_utf16_lossy(std::slice::from_raw_parts(text, len));
-        let sddl = format!("D:P(A;{};FA;;;{sid})", if directory { "OICI" } else { "" });
+        let sid_text = String::from_utf16_lossy(std::slice::from_raw_parts(text, len));
+        let sddl = format!(
+            "D:P(A;{};FA;;;{sid_text})",
+            if directory { "OICI" } else { "" }
+        );
         let sddl: Vec<u16> = sddl.encode_utf16().chain(Some(0)).collect();
         let mut descriptor = ptr::null_mut();
         if ConvertStringSecurityDescriptorToSecurityDescriptorW(
@@ -74,8 +77,10 @@ pub fn protect(path: &Path, directory: bool) -> io::Result<()> {
         let code = SetNamedSecurityInfoW(
             wide(path).as_ptr(),
             SE_FILE_OBJECT,
-            DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION,
-            ptr::null_mut(),
+            OWNER_SECURITY_INFORMATION
+                | DACL_SECURITY_INFORMATION
+                | PROTECTED_DACL_SECURITY_INFORMATION,
+            sid,
             ptr::null_mut(),
             acl,
             ptr::null(),

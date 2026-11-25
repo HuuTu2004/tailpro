@@ -50,7 +50,7 @@ jobs:
       - name: Verify generated contracts
         run: git diff --exit-code -- src/shared/contracts/generated.ts
       - name: Build native desktop bundles
-        run: npm run tauri build -- --locked --bundles ${{ matrix.bundles }}
+        run: npm run tauri -- build --bundles ${{ matrix.bundles }} -- --locked
         env:
           APPIMAGE_EXTRACT_AND_RUN: '1'
           NO_STRIP: 'true'

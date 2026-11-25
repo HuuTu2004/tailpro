@@ -36,11 +36,9 @@ pub fn runtime_dir() -> Result<PathBuf> {
         p
     } else {
         let home = PathBuf::from(std::env::var_os("HOME").ok_or_else(denied)?);
-        let cache = home.join(".cache");
-        create_private(&cache)?;
-        cache
+        home
     };
-    let path = base.join("tailpro-bridge");
+    let path = base.join(".tailpro-bridge");
     create_private(&path)?;
     if path.as_os_str().len() + 48 > 104 {
         return Err(Error::Limit("Unix runtime path too long"));

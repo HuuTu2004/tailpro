@@ -44,7 +44,7 @@ npm run tauri dev
 Build gói cài đặt trên đúng hệ điều hành:
 
 ```bash
-npm run tauri build -- --locked
+npm run tauri -- build -- --locked
 cargo build -p tailpro-mcp --release --locked
 ```
 
