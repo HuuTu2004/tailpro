@@ -6,6 +6,12 @@ TailPro is a local desktop workspace for exploring remote logs over SSH. Built w
 
 Version 0.1.0 is a development preview. Native packages are built on each target OS; signing and runtime coverage are described below.
 
+## Application
+
+![TailPro log workspace and event details](docs/assets/screenshots/workspace.png)
+
+Spring Boot simulation over SSH, with the live workspace and raw event details.
+
 ## Features
 
 - Saved SSH connections, config aliases, private-key selection, optional jump hosts, strict host-key verification and per-session dynamic-config consent.

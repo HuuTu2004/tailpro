@@ -6,6 +6,12 @@
 
 Bản 0.1.0 là development preview. Mỗi gói được build trên hệ điều hành đích; các trường hợp chưa nghiệm thu được ghi rõ trong tài liệu trạng thái.
 
+## Giao diện ứng dụng
+
+![TailPro log workspace and event details](docs/assets/screenshots/workspace.png)
+
+Workspace đọc log Spring Boot qua SSH, kèm Event details và raw stack trace.
+
 ## Cài đặt
 
 | Máy dùng ứng dụng | Gói tải | Yêu cầu |
