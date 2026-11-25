@@ -386,7 +386,7 @@ async fn file(reader: &Reader, session: &Session, path: &str, cp: &mut Checkpoin
                     _ = tick.tick()=>{if device.is_empty() && Instant::now()>opened_deadline {return Err(Error::Timeout);}reader.admit(decoder.assembler.flush_due(Instant::now()),cp).await?;},
                     result = limited.read_until(b'\n', &mut header) => {
                         let n=result?;
-                        if n==0 {return Err(Error::NeedsAction("file helper ended; Python 3, regular-file access and /proc are required".into()));}
+                        if n==0 {return Err(Error::NeedsAction("file helper ended; verify Python 3, regular-file read access and stable file identity".into()));}
                         break;
                     }
                 }

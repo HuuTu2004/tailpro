@@ -9,7 +9,8 @@ import { SourceTabs } from '../features/live-view/SourceTabs';
 import { LiveView } from '../features/live-view/LiveView';
 import { Settings } from '../features/settings/Settings';
 import { native } from '../shared/client/native';
-import type { AppStatus } from '../shared/contracts/generated';
+import { listen } from '@tauri-apps/api/event';
+import type { AppStatus, ConnectionInfo, HostProfile } from '../shared/contracts/generated';
 import './styles.css';
 
 type Page = 'workspace' | 'connections' | 'settings' | 'new-connection';
@@ -22,6 +23,7 @@ const initialPage: Page = connectionEditor ? 'new-connection' : managementWindow
 function App() {
   const [page, setPage] = useState<Page>(initialPage);
   const [status, setStatus] = useState<AppStatus>();
+  const [savedHosts, setSavedHosts] = useState<HostProfile[]>([]);
   const [selected, setSelected] = useState('');
   const [error, setError] = useState('');
   const [readingStatus, setReadingStatus] = useState('Ready');
@@ -98,7 +100,6 @@ function App() {
     const next = await native.status();
     if (!alive.current || generation !== statusGeneration.current) return;
     statusRef.current = next; setStatus(next);
-    setSelected(current => next.connections.some(connection => connection.host.id === current) ? current : next.connections[0]?.host.id ?? '');
     return next;
   }
 
@@ -114,6 +115,29 @@ function App() {
     void poll();
     return () => { polling = false; alive.current = false; statusGeneration.current++; clearTimeout(timer); };
   }, []);
+
+  const activeProfilesKey = JSON.stringify(status?.connections.map(connection => connection.host) ?? []);
+  useEffect(() => {
+    let mounted = true;
+    let revision = 0;
+    let unlisten: (() => void) | undefined;
+    async function loadSavedHosts() {
+      const request = ++revision;
+      try { const hosts = await native.savedHosts(); if (mounted && request === revision) setSavedHosts(hosts); }
+      catch (reason) { if (mounted && request === revision) setError(String(reason)); }
+    }
+    void loadSavedHosts();
+    window.addEventListener('focus', loadSavedHosts);
+    void listen('connection-profiles-changed', () => void loadSavedHosts()).then(stop => { if (mounted) unlisten = stop; else stop(); }).catch(reason => { if (mounted) setError(String(reason)); });
+    return () => { mounted = false; unlisten?.(); window.removeEventListener('focus', loadSavedHosts); };
+  }, [activeProfilesKey]);
+
+  const connections: ConnectionInfo[] = [...(status?.connections ?? [])];
+  for (const host of savedHosts) if (!connections.some(connection => connection.host.id === host.id)) connections.push({ host, state: 'disconnected', detail: null });
+  const connectionsKey = connections.map(connection => connection.host.id).join('|');
+  useEffect(() => {
+    setSelected(current => connections.some(connection => connection.host.id === current) ? current : connections[0]?.host.id ?? '');
+  }, [connectionsKey]);
 
   useEffect(() => {
     function shortcut(event: KeyboardEvent) {
@@ -141,7 +165,6 @@ function App() {
     }
     setPage(next);
   }
-  const connections = status?.connections ?? [];
 
   if (route.get('manager') === 'add-log') return <AddLogPath hostId={route.get('host') ?? ''} status={status}/>;
 
@@ -149,7 +172,7 @@ function App() {
 
   return <div className={'app-shell' + (managementWindow ? ' management-shell' : ' log-tree-shell')}>
     {!managementWindow && <aside className="app-sidebar">
-      <HostLogTree connections={connections} sources={sources} selectedHost={selected} scope={scope} opening={opening} closing={closing} selectHost={setSelected} open={openTreeSource} manageConnections={() => changePage('connections')}/>
+      <HostLogTree connections={connections} sources={sources} selectedHost={selected} scope={scope} opening={opening} closing={closing} selectHost={setSelected} open={openTreeSource} connect={host => run(() => native.connect(host))} manageConnections={() => changePage('connections')}/>
       <div className="navigator-tools"><Button variant="ghost" onClick={() => changePage('connections')}>Connections</Button><Button variant="ghost" onClick={() => changePage('settings')}>Settings</Button></div>
     </aside>}
     {managementWindow && <header className="app-header"><div className="page-title"><h1>{page === 'connections' ? 'Connections' : 'Settings'}</h1></div></header>}
@@ -163,7 +186,7 @@ function App() {
       {managementWindow && page === 'connections' && <section className="standalone-page" id="page-connections" role="region" aria-label="Connections"><Connections connections={connections} selected={selected} select={setSelected} run={run}/></section>}
       {managementWindow && page === 'settings' && <section className="standalone-page" id="page-settings" role="region" aria-label="Settings"><Settings status={status}/></section>}
     </main>
-    <footer className="app-footer" aria-label="Workspace status"><span>{status ? `${connections.filter(c => c.state === 'connected').length}/${connections.length} hosts connected · ${sources.length} reading` : 'Connecting to local runtime…'}{connections.some(c => c.state !== 'connected') && ' · Host needs attention'}</span><span title={readingStatus}>{managementWindow ? 'Local settings' : readingStatus}</span></footer>
+    <footer className="app-footer" aria-label="Workspace status"><span>{status ? `${connections.filter(c => c.state === 'connected').length}/${connections.length} hosts connected · ${sources.length} reading` : 'Connecting to local runtime…'}{connections.some(c => c.state === 'needs_action' || c.state === 'reconnecting') && ' · Host needs attention'}</span><span title={readingStatus}>{managementWindow ? 'Local settings' : readingStatus}</span></footer>
   </div>;
 }
 

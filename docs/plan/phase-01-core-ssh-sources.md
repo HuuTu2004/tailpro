@@ -22,6 +22,8 @@ Khi giao code, chỉ định một mục, ví dụ `1.1`. Mục khác trong phas
 
 ## 1.2 — Kết nối SSH và tái sử dụng phiên
 
+Thiết kế UX/capability/authentication tiếp theo: [connection và source picker](../system-design/connection-and-source-picker.md). Đây là đề xuất, chưa phải implementation; giữ riêng gates bên dưới.
+
 **Đầu ra:** Chọn host có sẵn hoặc nhập profile rồi kết nối an toàn, dùng chung một master cho các nguồn trên host.
 
 **Dependency:** 1.1 · **Code:** `app-core/adapters/ssh/`, connection use cases, `src/features/connections/`, settings adapter.
@@ -30,7 +32,7 @@ Khi giao code, chỉ định một mục, ví dụ `1.1`. Mục khác trong phas
 2. Dùng OpenSSH với ProxyJump, SSH Agent/IdentityAgent đã cấu hình; hỗ trợ 1Password hoặc key manager qua agent socket sẵn có, không cài/tạo daemon.
 3. Triển khai host-key/trust generation, auth states và ControlMaster thuộc app; invalidation khi config thay đổi.
 4. Thêm connect/disconnect, keepalive/backoff/NeedsAction, cancellation và kill/reap đúng owned children.
-5. UI25/11/2026: Connections/+ mở thẳng form SSH; Connect gọi API kết nối và lưu profile hiện có, không qua danh sách → Add → Save. Test là tùy chọn; saved profile chỉ điền form, không tự Connect; errors giữ bản nháp để sửa/retry.
+5. UI25/11/2026: main HOSTS khôi phục saved profiles ở trạng thái disconnected và nút Connect dùng lại nguyên profile; active state ưu tiên theo ID, pins hiện sau xác minh remote identity. Connections/+ mở thẳng form SSH; Connect gọi API kết nối và lưu profile hiện có, không qua danh sách → Add → Save. Test là tùy chọn; saved profile chỉ điền form, không tự Connect; errors giữ bản nháp để sửa/retry.
 
 **Xong khi:** Thử alias, jump, agent socket, unknown/changed host key, config đổi và mất mạng; nhiều nguồn reuse master, stop không reconnect lại. Đo latency warm channel, không suy từ cold connect.
 
@@ -44,7 +46,7 @@ Khi giao code, chỉ định một mục, ví dụ `1.1`. Mục khác trong phas
 
 1. Thêm bounded framing, timestamp/level/message/ID/duration extraction và opaque wire IDs.
 2. Strip ANSI trước parse và sau JSON-unescape; malformed/oversize input trả text/quality flags có giới hạn.
-3. Nhận dạng Go panic, Python traceback, Node error; nối continuation cùng source/stream/generation, flush theo caps/idle/stop.
+3. Nhận dạng Go panic, Python traceback, Node error và Java exception; nối continuation cùng source/stream/generation, flush theo caps/idle/stop. Java giữ cả `Caused by`, `Suppressed`, `... N more` và Logback `... N common frames omitted` trong cùng group.
 4. Giữ raw bounded cho Inspector, escaped khi render; phân biệt event_time và observed_at.
 
 **Xong khi:** Thao tác với JSON/text/ANSI escaped, malformed/deep/large JSON và ba kiểu stack; level:error giữ các phần stack còn retained, không nuốt header kế tiếp. Đo allocations với input lớn.
@@ -91,12 +93,15 @@ Khi giao code, chỉ định một mục, ví dụ `1.1`. Mục khác trong phas
 2. Lưu device/inode/generation/next raw-byte offset sau contiguous ACK; resume đúng offset+1 trước decode.
 3. Initial recent window resync newline; rotation phát marker rồi đọc file mới từ 0, truncate/guard mismatch reset có uncertainty.
 4. Recheck identity/quyền/regular type; hủy helper và reap khi stop/disconnect.
+5. macOS không có `/proc`: recheck bằng reopen selected path với NOFOLLOW/NONBLOCK và đối chiếu device/inode của hai descriptors; Linux vẫn reopen `/proc/self/fd`. Nghiệm thu trên log Spring Boot qua Tailscale ghi riêng trong process.
 
 **Xong khi:** Thử file multi-GiB, tên có quote/space, partial record, rename rotation, copytruncate/regrow và FIFO race. Đo remote CPU/process count và seek latency; không claim exactly-once khi bytes đã mất.
 
 **Giới hạn:** Chỉ file regular seekable; discovery không được tự mở nội dung để hỗ trợ feature này.
 
 ## 1.7 — Tìm nguồn log theo ba tầng
+
+Thiết kế picker/discovery tiếp theo: [connection và source picker](../system-design/connection-and-source-picker.md). Found sources/Browse/Enter path, capability detection và per-provider coverage đang ở trạng thái đề xuất.
 
 **Đầu ra:** Bấm Discover hoặc gõ đường dẫn để chọn được nguồn có provenance và quyền rõ ràng.
 

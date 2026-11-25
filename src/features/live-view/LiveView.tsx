@@ -9,6 +9,7 @@ import { LOG_ROW_HEIGHT as HEIGHT, LOG_HEADER_HEIGHT } from './geometry';
 import { HighlightedMessage, messageNeedles, Timestamp } from './LogText';
 import { Button } from '../../shared/ui/Controls';
 import { Menu } from '../../shared/ui/Menu';
+import { TimeFilter, timeQuery, type TimeRange } from './TimeFilter';
 import './workspace.css';
 type Props = { onGetStarted?: () => void; status?: AppStatus; scope: string[]; sourceTabs: ReactNode; reading: boolean; queryInput: RefObject<HTMLInputElement | null>; viewport: RefObject<HTMLDivElement | null>; active?: boolean; onReadingStatus?: (status: string) => void; onInspect?: () => void; inspectorVisible?: boolean };
 const columns = ['time', 'server', 'source', 'level', 'message', 'trace_id', 'duration_ms'] as const;
@@ -29,6 +30,9 @@ export function LiveView({ onGetStarted, status, scope, sourceTabs, reading, que
   const [viewId, setViewId] = useState('');
   const [session, setSession] = useState(0);
   const [query, setQuery] = useState('');
+  const [timeRange, setTimeRange] = useState<TimeRange>({ from: '', to: '' });
+  const [level, setLevel] = useState('');
+  const effectiveQuery = useMemo(() => [query.trim(), ...timeQuery(timeRange), level ? `level:${level}` : ''].filter(Boolean).join(' AND '), [query, timeRange, level]);
   const [renderedQuery, setRenderedQuery] = useState('');
   const needles = useMemo(() => messageNeedles(renderedQuery), [renderedQuery]);
   const [pages, setPages] = useState<ViewPage[]>([]);
@@ -45,7 +49,6 @@ export function LiveView({ onGetStarted, status, scope, sourceTabs, reading, que
   const [scroll, setScroll] = useState(0);
   const [visibleHeight, setVisibleHeight] = useState(432);
   const [shown, setShown] = useState<Column[]>(['time', 'level', 'source', 'message']);
-  const [metrics, setMetrics] = useState({ frames: [] as number[], pageBytes: 0, coreUs: '0', ipcMs: 0 });
   const generation = useRef(0);
   const detailGeneration = useRef(0);
   const epoch = useRef(0);
@@ -59,7 +62,7 @@ export function LiveView({ onGetStarted, status, scope, sourceTabs, reading, que
   const pageRevision = useRef('');
   const noticeRef = useRef<ViewNotice | undefined>(undefined);
   const pagesRef = useRef<ViewPage[]>([]);
-  const current = useRef({ query, scope, viewId }); current.current = { query, scope, viewId };
+  const current = useRef({ query: effectiveQuery, scope, viewId }); current.current = { query: effectiveQuery, scope, viewId };
   const fetchRef = useRef<(kind?: 'reset' | 'older' | 'verify') => Promise<void>>(async () => {});
   const configKey = JSON.stringify(scope);
   useEffect(() => { setSelection(''); setActiveRow(''); pausedRef.current = false; setPaused(false); setArrivals('0'); anchor.current = null; readingAnchor.current = null; needsVerify.current = false; }, [configKey]);
@@ -101,7 +104,6 @@ export function LiveView({ onGetStarted, status, scope, sourceTabs, reading, que
     const requestEpoch = epoch.current;
     const next = ++generation.current;
     inFlight.current = true; setBusy(true);
-    const start = performance.now();
     try {
       const page = await native.viewPage({ view_id: config.viewId, generation: next, query: config.query, sources: config.scope, before, anchor: kind === 'verify' ? readingAnchor.current : pausedRef.current ? anchor.current : null });
       if (next !== generation.current || requestEpoch !== epoch.current) return;
@@ -109,7 +111,6 @@ export function LiveView({ onGetStarted, status, scope, sourceTabs, reading, que
       if (page.anchor_expired) { setExpired(true); setError('Reading anchor or page cursor expired from retention. Jump to live or reload retained logs.'); return; }
       if (kind === 'verify') return;
       setError(''); setExpired(false);
-      setMetrics(prev => ({ ...prev, pageBytes: JSON.stringify(page).length, coreUs: page.elapsed_us, ipcMs: performance.now() - start }));
       let nextPages = kind === 'older' ? [page, ...pagesRef.current] : [page];
       while (nextPages.length > 10 || nextPages.reduce((n, p) => n + p.events.length, 0) > 2000 || nextPages.reduce((n, p) => n + bytes(p), 0) > 24 * 1024 * 1024) nextPages.pop();
       const oldCount = pagesRef.current.reduce((n, p) => n + p.events.length, 0);
@@ -155,53 +156,47 @@ export function LiveView({ onGetStarted, status, scope, sourceTabs, reading, que
   }, [session, reading]);
   useEffect(() => {
     epoch.current++; generation.current++; inFlight.current = true; debounceUntil.current = performance.now() + 150;
+    setSelection(''); setActiveRow(''); pagesRef.current = []; setPages([]); pageRevision.current = '';
+    anchor.current = null; readingAnchor.current = null; needsVerify.current = false;
     const timer = setTimeout(() => { void fetchRef.current(); }, 150);
     return () => clearTimeout(timer);
-  }, [query, configKey, viewId]);
+  }, [effectiveQuery, configKey, viewId]);
   useEffect(() => {
     if (!viewport.current) return;
     const observer = new ResizeObserver(entries => { setVisibleHeight(entries[0].contentRect.height); const node = viewport.current; if (node) setViewportWidth(node.clientWidth); }); observer.observe(viewport.current);
     return () => observer.disconnect();
   }, []);
-  useEffect(() => {
-    // Bounded in-memory frame samples; diagnostics contain timings only, never log payloads.
-    let frame = 0; let previous = performance.now(); let samples: number[] = []; let ticks = 0;
-    const tick = (now: number) => { const delta = now - previous; previous = now; if (!document.hidden && delta < 1000) samples.push(delta); if (samples.length > 180) samples.shift();
-      if (++ticks % 120 === 0) setMetrics(m => ({ ...m, frames: [...samples] })); frame = requestAnimationFrame(tick); };
-    frame = requestAnimationFrame(tick); return () => cancelAnimationFrame(frame);
-  }, []);
   const rows = useMemo(() => pages.flatMap(p => p.events), [pages]);
   const start = Math.min(Math.max(0, rows.length - 1), Math.max(0, Math.floor((scroll - LOG_HEADER_HEIGHT) / HEIGHT) - 8));
-  const visibleColumns = shown.filter(c => c !== 'source' || scope.length > 1);
+  const visibleColumns = columns.filter(c => shown.includes(c));
   const end = Math.min(rows.length, start + Math.ceil(visibleHeight / HEIGHT) + 16);
   const longestMessage = pages.reduce((width, page) => Math.max(width, messageWidth(page)), 300);
-  const columnWidths: Record<Column, string> = { time: `${Math.min(360, Math.max(148, ...rows.map(row => row.time_basis === 'local_observed_at' ? 148 : row.time.length * 8 + 24)))}px`, server: '130px', source: '160px', level: '80px', message: `minmax(${longestMessage}px, 1fr)`, trace_id: '170px', duration_ms: '105px' };
+  const columnWidths: Record<Column, string> = { time: `${Math.min(360, Math.max(148, ...rows.map(row => row.time_basis === 'local_observed_at' ? 240 : row.time.length * 8 + 24)))}px`, server: '130px', source: '160px', level: '80px', message: `minmax(${longestMessage}px, 1fr)`, trace_id: '170px', duration_ms: '105px' };
   const grid = visibleColumns.map(c => columnWidths[c]).join(' ');
   const tableMinWidth = visibleColumns.reduce((width, column) => width + (column === 'message' ? longestMessage : parseInt(columnWidths[column])), 0);
   const horizontalMax = Math.max(0, tableMinWidth - viewportWidth);
   const scrollThumbWidth = `${Math.min(100, viewportWidth / Math.max(tableMinWidth, 1) * 100)}%`;
-  const sortedFrames = [...metrics.frames].sort((a, b) => a - b);
-  const frame95 = sortedFrames[Math.floor(sortedFrames.length * .95)] ?? 0;
   const closeInspector = useCallback(() => { setSelection(''); viewport.current?.focus(); }, [viewport]);
   useEffect(() => {
     if (!selection || !active || !inspectorVisible) return;
     const escape = (event: KeyboardEvent) => { if (event.key === 'Escape' && !document.querySelector('dialog[open]')) { event.preventDefault(); closeInspector(); } };
     window.addEventListener('keydown', escape); return () => window.removeEventListener('keydown', escape);
   }, [selection, closeInspector, active, inspectorVisible]);
-  useEffect(() => { onReadingStatus?.(`${scope.length} source${scope.length === 1 ? '' : 's'} in scope · ${query ? `Query: ${query}` : 'All retained'} · ${!reading ? 'Ready' : paused ? `Paused · ${arrivals} new` : 'Following'}`); }, [scope.length, query, reading, paused, arrivals, onReadingStatus]);
+  const incomplete = scope.some(id => !status?.sources.some(s => s.id === id)) || Boolean(notice && (notice.discarded !== '0' || notice.evicted !== '0' || !notice.complete || notice.gap_sources.length)) || pages.some(p => p.gap_sources.length || !p.complete || p.truncated);
+  const unhealthy = status?.sources.filter(source => scope.includes(source.id) && /reconnect|error|fail|needs_action/i.test(source.state)).length ?? 0;
+  useEffect(() => {
+    const filters = [query ? `Search: ${query}` : '', timeRange.from || timeRange.to ? 'Time range' : '', level ? `Status: ${level.toUpperCase()}` : ''].filter(Boolean).join(' · ') || 'All retained';
+    onReadingStatus?.(`${scope.length} source${scope.length === 1 ? '' : 's'} in scope · ${filters} · ${!reading ? 'Ready' : paused ? `Paused · ${arrivals} new` : 'Following'}${incomplete ? ' · Partial log coverage' : ''}${unhealthy ? ` · ${unhealthy} source(s) need attention` : ''}`);
+  }, [scope.length, query, timeRange, level, reading, paused, arrivals, incomplete, unhealthy, onReadingStatus]);
   return <section className="live-view" aria-label="Multi-source live logs" style={{ '--log-row-height': `${HEIGHT}px`, '--log-header-height': `${LOG_HEADER_HEIGHT}px` } as CSSProperties}>
     {sourceTabs}
-    <div className="viewer-toolbar"><div className="section-heading log-toolbar"><h2>Live logs <span className={`badge ${paused ? 'paused' : 'following'}`}>{!reading ? 'Ready' : paused ? 'Paused' : 'Live'}</span></h2><div className="actions"><Button disabled={!viewId} title={paused ? 'Resume live' : 'Pause viewport · Space'} onClick={() => paused ? resume() : pause()}>{paused ? `Resume · ${arrivals} new` : 'Pause'}</Button>{paused && <Button disabled={!viewId} onClick={resume}>Jump to live</Button>}<Button disabled={!activeRow} aria-expanded={Boolean(selection && inspectorVisible)} aria-controls="event-details-panel" onClick={() => { if (selection && inspectorVisible) closeInspector(); else { pause(); onInspect?.(); setSelection(activeRow); } }}>{selection && inspectorVisible ? 'Hide details' : 'Details'}</Button><IncidentExport sources={scope.length ? scope : status?.sources.map(s => s.id) ?? []} query={query}/></div></div>
+    <div className="viewer-toolbar"><div className="section-heading log-toolbar"><h2>Live logs <span className={`badge ${paused ? 'paused' : 'following'}`}>{!reading ? 'Ready' : paused ? 'Paused' : 'Live'}</span></h2><div className="actions"><Button disabled={!viewId} title={paused ? 'Resume live' : 'Pause viewport · Space'} onClick={() => paused ? resume() : pause()}>{paused ? `Resume · ${arrivals} new` : 'Pause'}</Button>{paused && <Button disabled={!viewId} onClick={resume}>Jump to live</Button>}<Button disabled={!activeRow} aria-expanded={Boolean(selection && inspectorVisible)} aria-controls="event-details-panel" onClick={() => { if (selection && inspectorVisible) closeInspector(); else { pause(); onInspect?.(); setSelection(activeRow); } }}>{selection && inspectorVisible ? 'Hide details' : 'Details'}</Button><IncidentExport sources={scope.length ? scope : status?.sources.map(s => s.id) ?? []} query={effectiveQuery}/></div></div>
     <QueryBar value={query} change={value => { if (value !== query) { epoch.current++; generation.current++; setQuery(value); } }} input={queryInput}/></div>
-    <div className="view-context-row">{status?.connections.some(connection => connection.host.environment === 'production' && status.sources.some(source => scope.includes(source.id) && source.host_id === connection.host.id)) && <span className="scope-production">Production</span>}<Menu className="view-options" label="Columns"><div className="view-option-content"><h3>Visible columns</h3><div className="check-row">{columns.map(c => <label key={c}><input type="checkbox" checked={shown.includes(c)} disabled={c === 'message'} onChange={e => setShown(previous => e.target.checked ? [...previous, c] : previous.filter(column => column !== c))}/>{columnLabels[c]}</label>)}</div></div></Menu>
-    <Menu className="source-health-menu" label={<>Source status <span className="status-count">{status?.sources.length ?? 0}</span>{status?.sources.some(s => /reconnect|error|fail|needs_action/i.test(s.state)) && <span className="status-attention">Needs attention</span>}</>}><div className="source-health" aria-label="Source health outside query filters">{status?.sources.map(s => { const host = status.connections.find(c => c.host.id === s.host_id); const name = s.spec.kind === 'file' ? s.spec.path : s.spec.kind === 'journal' ? s.spec.unit : s.spec.kind === 'kubernetes' ? `${s.spec.namespace}/${s.spec.pod}/${s.spec.container}` : s.spec.container_id; return <span key={s.id} className={`health-chip ${host?.host.environment ?? ''}`} title={`${host?.host.target} / ${name} · ${s.id} · ${s.detail ?? s.state}`}>{host?.host.target} / {name.split('/').at(-1)} · {s.state}{host?.host.environment === 'production' && <b className="badge production">Production</b>}</span>; })}{!status?.sources.length && <span className="hint">Start a log source to begin.</span>}</div></Menu>
-    {(scope.some(id => !status?.sources.some(s => s.id === id)) || (notice && (notice.discarded !== '0' || notice.evicted !== '0' || !notice.complete || notice.gap_sources.length > 0)) || pages.some(p => p.gap_sources?.length || !p.complete || p.truncated)) && <details className="coverage-summary"><summary>Coverage needs attention{notice && ` · ${notice.discarded} discarded · ${notice.evicted} evicted`}{pages.some(p => !p.complete || p.truncated) && ' · Partial results'} · expand for details</summary>
-    {scope.some(id => !status?.sources.some(s => s.id === id)) && <p className="notice">This filter includes unavailable source IDs. Restore does not start or grant sources.</p>}
-    {notice && (notice.discarded !== '0' || notice.evicted !== '0' || !notice.complete || notice.gap_sources.length > 0) && <p className="hint retention-summary" aria-live="off">{notice.discarded} discarded · {notice.evicted} evicted{!notice.complete && ' · Catch-up incomplete; current snapshot reloaded'}{notice.gap_sources.length > 0 && ` · Gaps: ${notice.gap_sources.join(', ')}`}</p>}
-    {pages.some(p => p.gap_sources?.length) && <p className="notice">Source gaps or retention loss affect this window: {[...new Set(pages.flatMap(p => p.gap_sources ?? []))].join(', ')}. Zero matches do not establish absence.</p>}
-    {pages.some(p => !p.complete || p.truncated) && <p className="notice">Results are bounded/partial. {pages.some(p => p.truncated) ? 'Page reached the byte cap; continue with older pages.' : 'Scan deadline reached; narrow the query.'}</p>}
-    </details>}
-    <Menu className="measurements-menu" label="Measurements"><details open className="viewer-metrics"><summary>Viewer measurements</summary>{notice && <p className="hint">{notice.retained_rows} retained · {(Number(notice.resident_bytes) / 1024 / 1024).toFixed(1)} MiB charged</p>}<p className="hint">Frame interval p95 (last 180): {frame95.toFixed(1)} ms · Rust job {(Number(metrics.coreUs) / 1000).toFixed(1)} ms · IPC {metrics.ipcMs.toFixed(1)} ms · Page {metrics.pageBytes} B · Cache {Math.round(pages.reduce((n, p) => n + bytes(p), 0) / 1024)} KiB. Frame samples include idle time; use a scroll session for acceptance. New arrivals count all sources, independent of the query.</p></details></Menu></div>
+    <div className="view-context-row" aria-label="Log display and filters">
+      <Menu className="view-options" ariaLabel="Choose visible columns" label={`Columns · ${visibleColumns.length}`}><div className="view-option-content"><h3>Visible columns</h3><div className="column-options">{columns.map(column => <label key={column}><input type="checkbox" checked={shown.includes(column)} disabled={shown.length === 1 && shown.includes(column)} onChange={event => setShown(previous => event.target.checked ? [...previous, column] : previous.filter(value => value !== column))}/>{columnLabels[column]}</label>)}</div></div></Menu>
+      <Menu className="time-filter-menu" ariaLabel="Filter by time" label={`Time · ${timeRange.from || timeRange.to ? 'Custom' : 'All'}`}><TimeFilter value={timeRange} change={setTimeRange}/></Menu>
+      <Menu className="status-filter-menu" ariaLabel="Filter by status" label={`Status · ${level ? level.toUpperCase() : 'All'}`}><div className="status-filter-options">{['', 'trace', 'debug', 'info', 'warn', 'error', 'unknown'].map(value => <Button key={value} aria-pressed={level === value} onClick={() => setLevel(value)}>{value ? value.toUpperCase() : 'All statuses'}</Button>)}</div></Menu>
+    </div>
     {error && <p role="alert" className="notice">{error}{error.includes('View expired') && <Button onClick={() => { pausedRef.current = false; setPaused(false); anchor.current = null; setSession(n => n + 1); }}>Reopen viewer</Button>}{expired && <Button onClick={() => { anchor.current = null; readingAnchor.current = null; needsVerify.current = false; setExpired(false); void fetchRef.current(); }}>Reload retained logs</Button>}</p>}
     <ResizableViewer side="right" panel={selection && viewId && inspectorVisible ? <Inspector active={active} sources={scope.length ? scope : status?.sources.map(s => s.id) ?? []} viewId={viewId} eventId={selection} nextGeneration={nextDetail} close={closeInspector} select={setSelection}/> : null}><div className="table-area"><div className="paging"><Button disabled={busy || !pages[0]?.older_cursor || expired} onClick={() => { pause(); void fetchRef.current('older'); }}>Load older page</Button><span role="status">{busy ? 'Reading…' : `${rows.length} cached rows / 2000`}{paused && ` · ${arrivals} new events across sources`}</span></div>
       <div className="log-viewport" ref={viewport} tabIndex={0} role="grid" aria-label="Log events. Space pauses, arrows select, Enter inspects" aria-rowcount={rows.length + 1} aria-colcount={visibleColumns.length} aria-activedescendant={activeRow && rows.slice(start, end).some(r => r.id === activeRow) ? `event-${activeRow}` : undefined}

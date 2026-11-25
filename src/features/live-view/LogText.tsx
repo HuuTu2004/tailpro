@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 
 export function Timestamp({ value, basis }: { value: string; basis: string }) {
   const display = basis === 'local_observed_at'
-    ? new Date(Number(value)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, fractionalSecondDigits: 3 })
+    ? new Date(Number(value)).toLocaleString([], { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, fractionalSecondDigits: 3 })
     : value;
   // Preserve the source's spelling, fractional precision and zone. Unknown formats stay intact.
   const match = /^(.*?)(\d{2}:\d{2}:\d{2})([.,]\d+)?(.*)$/.exec(display);

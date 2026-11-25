@@ -163,7 +163,7 @@ Discovery hỗ trợ metadata completion/growth observation và config opt-in. D
 
 `log-core/query` compile bounded grammar và scan giữ heap tối đa 200 references; không giữ full result index. Page cursors và paused reading anchors là opaque retained event IDs; retention expiry trả explicit fallback. Snapshot chỉ pin trong CPU job, không tồn tại suốt paused view. CPU pool hai permits dùng chung, normalization background tối đa một; query/detail có bốn pending slots và cooperative cancellation trước/giữa scan/projection.
 
-Frontend giữ tối đa 10 pages/2000 rows/24 MiB estimated logical charge, Inspector tối đa 1 MiB/4096 nodes. `log-core/inspect` borrow RawValue từng nhánh, không tạo tree toàn store. Page/detail IPC cap 512 KiB exact JSON; raw control-heavy có display truncation ghi rõ. UI metrics có bounded frame sample ring và page/job/E2E timings; acceptance và khoảng trống native profiling ở [phase 2 evidence](../process/phase-02-acceptance.md). Logical accounting không thay WebView RSS measurement.
+Frontend giữ tối đa 10 pages/2000 rows/24 MiB estimated logical charge, Inspector tối đa 1 MiB/4096 nodes. `log-core/inspect` borrow RawValue từng nhánh, không tạo tree toàn store. Page/detail IPC cap 512 KiB exact JSON; raw control-heavy có display truncation ghi rõ. Theo yêu cầu25/11/2026, hàng tùy chọn chỉ còn Columns/Time/Status; bỏ Measurements và frame-sample loop khỏi viewer. Rust page timings/counters vẫn có ở backend; source health/coverage hiển thị ngắn ở footer. Acceptance và khoảng trống native profiling ở [phase 2 evidence](../process/phase-02-acceptance.md). Logical accounting không thay WebView RSS measurement.
 
 ## Chi tiết implementation phase 3
 

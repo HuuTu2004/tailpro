@@ -15,6 +15,7 @@ Khi giao code, chỉ định một mục, ví dụ `2.1`. Mục khác trong phas
 **Dependency:** 1.1, 1.4, 1.5, 1.6 · **Code:** `src/features/live-view/`, shared typed client/channels, app-core view jobs.
 
 1. Hiển thị Time/Server/Source/Level/Message/trace_id/duration_ms từ DTO, stable source badges và bounded column selection.
+   Theo yêu cầu25/11/2026, hàng tùy chọn chỉ có Columns, Time, Status. Columns chọn bất kỳ1–7cột và hiển thị đúng số cột; không bắt buộc Message hoặc tự ẩn Source theo scope. Bỏ Production/Source status/Coverage/Measurements khỏi hàng này; trạng thái coverage/source còn ở footer và Production giữ ở host/row. Time chọn ngày/giờ từ–đến theo timezone máy chạy app; Status là mức log chuẩn hóa, không phải trạng thái SSH.
 2. Kết nối paged snapshot→live view, virtualization, coalesced notices/ACK và latest-wins result generation.
 3. Giữ bounded page cache, release view/subscription khi đóng; expose source health/gap ngoài filtered rows và nhãn Production từ 1.8.
 4. Điều hướng kiểu DBeaver: cây HOSTS → log trong sidebar, thu gọn/mở rộng từng host và hiện số nguồn đã biết. Chỉ giữ một nút + cạnh host; bỏ dòng + Add log bên dưới. Nút + mở cửa sổ native Add log path riêng có host, input autofocus, Add/Cancel và Escape; ACK từ navigator mới đóng form. Thêm đường dẫn tại host chỉ tạo mục trong phiên; double-click hoặc Enter mới gọi Start và mở/activate tab log. Double-click lại nguồn đang mở không tạo reader trùng. × trên tab gọi Stop; chuyển tab không Stop. Combine sources chọn ít nhất hai reader đang mở để xem chung, giữ nhóm khi chuyển qua tab đơn. Đóng hết tab giải phóng view, không fallback sang đọc toàn bộ retained logs. File mới có thể được lưu vào pinned paths sau khi thật sự streaming, theo policy hiện có; những source khác được nhớ trong phiên, không tự khôi phục reader sau restart. Source health/Columns vẫn riêng; không tự Discovery hoặc Connect khi chỉ mở cây.
@@ -34,6 +35,7 @@ Bề mặt theo [interface refactors B1–B5](interface-refactors.md): Plex loca
 **Dependency:** 1.3, 1.4, 2.1 · **Code:** `log-core/query/`, `app-core` view use cases/settings, `src/features/query/`.
 
 1. Compile literal/AND/field filters và duration ms/s thành bounded QueryPlan; unsupported grammar có lỗi rõ.
+   Time predicate dùng `time` + comparison + RFC3339 có timezone, so sánh nanoseconds theo cùng clock đang hiển thị (event → transport → observed). UI chuyển datetime-local thành UTC, from inclusive và to inclusive toàn giây cuối bằng exclusive next-second bound; validate range trước Apply. Time/Status kết hợp search bằng AND ở backend, paging/export cùng query; không lọc riêng200rows trên frontend hoặc tự đọc thêm history ngoài retention.
 2. Execute bounded scans với cancellation/deadline, paging và source scope; UI debounce/latest-wins.
 3. Lưu Saved Views nhỏ trong versioned settings; restore query không tự cấp quyền hay start nguồn.
 

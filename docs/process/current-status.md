@@ -1,5 +1,9 @@
 # Tiến độ hiện tại
 
+Viewer25/11/2026: đã triển khai hàng tùy chọn đúng3mục Columns/Time/Status. Chọn1–7cột; time from/to có ngày/giờ và timezone máy chạy app; Status lọc normalized log level. Predicate time RFC3339/nanoseconds dùng chung backend query/paging/export, không lọc chỉ200rows frontend. Bỏ Production/Source status/Coverage/Measurements khỏi hàng này; health/coverage còn ở footer. Native SSH/Mac:1cột/7cột, kết hợp time+ERROR trả đúng4events, UTC và+07 cùng instant match đúng1event, invalid range giữ popup/lỗi, Clear trả200rows; popup800/1280px không overflow. Export preview cùng filter có1metadata+4events. Frontend build/typecheck, core Clippy/check/fmt và native bundled build PASS. Không viết automated tests; giới hạn retained window/gates khác giữ nguyên.
+
+Thiết kế mới theo yêu cầu25/11/2026: [kết nối và chọn log](../system-design/connection-and-source-picker.md), kèm [bố cục đề xuất](../assets/connection-and-source-picker.svg). **Design only, chưa đổi runtime**: capability-based discovery, Open logs picker (Found sources/Browse folders/Enter path), multi-select, preferences/restore và auth/trust UX. Password/interactive auth, fingerprint onboarding và picker mới vẫn chưa được triển khai; các runtime gates bên dưới giữ nguyên.
+
 Cập nhật: 25/11/2026, Asia/Bangkok. Snapshot implementation tại workspace `tailpro`; docs ở `docs/`.
 
 | Mục | Trạng thái thực tế |
@@ -138,3 +142,10 @@ Validation: npm run build (gồm typecheck) và git diff --check PASS. Manual br
 Nút + cạnh từng host mở `log-path-editor` native480×260 (minimum400×240), có host/Production label, input autofocus, Add/Cancel và Escape/OS close. Bỏ form inline và dòng + Add log bên dưới; mỗi host chỉ còn một nút thêm. Mở lại cùng host focus draft; không tự thay host/draft của cửa sổ đang mở. Add validate absolute path≤4096bytes, không CR/LF/NUL; navigator kiểm tra host còn tồn tại, dedupe và cap128 trước ACK. Form chỉ đóng sau ACK; lỗi giữ path và timeout5s cho retry. Event DTO được generate từ Rust; chỉ main được mở/xác nhận, chỉ editor được submit/close, route encode và navigation allowlist như cửa sổ hiện có. Main được giữ sống khi editor còn mở. Không tự Start/pin/đọc log khi Add.
 
 Đã chạy contracts codegen, npm run build/typecheck, scoped desktop build và Clippy với -D warnings; native preview dùng mock ngoài repo đã mở đúng cửa sổ480×260, không còn form sidebar. Browser smoke với synthetic IPC ngoài repo xác nhận + mở cửa sổ, input autofocus, Add đóng sau ACK, path xuất hiện trong cây đúng host, Start count vẫn0 và số tab vẫn3. Không thêm automated tests; chưa kiểm chứng SSH/log file thật trong đợt UI này.
+
+
+## Spring Boot trên Mac qua Tailscale và nhớ kết nối — 25/11/2026
+
+Đã chạy project Java21/Spring Boot3.5.16 trên `admins-mac-studio`, native TailPro đọc3file sources thật qua SSH/Tailscale. Sửa file-helper phụ thuộc proc trên macOS (reopen NOFOLLOW/NONBLOCK + descriptor identity) và Java multiline thiếu Logback `common frames omitted`. Hai burst300requests; burst sau fix đối chiếu300HTTP completion/300audit,30ERROR,60WARN,Unicode và nested cause; rotation vẫn để continuity markers. Linux/Mac manual probes mở/rotate/symlink/FIFO/revoke PASS.
+
+Saved server profiles nay hiện lại trong main HOSTS sau restart với trạng thái disconnected và Connect một lần; active state ưu tiên theo ID. Không nhập lại host/user/port/agent/environment hoặc tạo profile trùng. Native restart thật xác nhận0connections/readers khi mở,1saved host hiện,Connect thành công rồi3pinned paths xuất hiện và double-click đọc lại. Saved profile/pins vẫn dùng atomic settings và remote identity; không tự Connect/Start/consent. Frontend typecheck/build, core Clippy/fmt, native bundled build và diff checks PASS. Chi tiết/scope/limitations ở [Mac Spring acceptance](macos-spring-production-acceptance.md); release/runtime gates khác giữ PARTIAL.

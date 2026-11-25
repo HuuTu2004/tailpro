@@ -8,19 +8,38 @@ def emit(meta, data=b''):
     sys.stdout.buffer.write(json.dumps(meta, separators=(',', ':')).encode() + b'\n')
     if data: sys.stdout.buffer.write(data)
     sys.stdout.buffer.flush()
+def recheck(fd):
+    # Linux can reopen the held inode directly. Other Unix hosts must reopen
+    # the selected path without following links, then prove it is that inode.
+    flags = os.O_RDONLY | os.O_NONBLOCK | os.O_CLOEXEC
+    check_path = '/proc/self/fd/' + str(fd) if sys.platform.startswith('linux') else path
+    if not sys.platform.startswith('linux'): flags |= os.O_NOFOLLOW
+    signal.alarm(1)
+    try:
+        check = os.open(check_path, flags)
+        try:
+            held, checked = os.fstat(fd), os.fstat(check)
+            if not stat.S_ISREG(checked.st_mode) or (held.st_dev, held.st_ino) != (checked.st_dev, checked.st_ino):
+                raise ValueError('file identity changed during access check')
+        finally:
+            os.close(check)
+    finally:
+        signal.alarm(0)
 def opened():
     signal.alarm(1)
     fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK | os.O_CLOEXEC | os.O_NOFOLLOW)
-    s = os.fstat(fd)
-    if not stat.S_ISREG(s.st_mode):
+    try:
+        s = os.fstat(fd)
+        if not stat.S_ISREG(s.st_mode):
+            raise ValueError('regular seekable file required')
+        os.lseek(fd, 0, os.SEEK_CUR)
+        recheck(fd)
+        return fd, s
+    except BaseException:
         os.close(fd)
-        raise ValueError('regular seekable file required')
-    os.lseek(fd, 0, os.SEEK_CUR)
-    # Recheck effective access using the descriptor, avoiding pathname substitution.
-    check = os.open('/proc/self/fd/' + str(fd), os.O_RDONLY | os.O_NONBLOCK | os.O_CLOEXEC)
-    os.close(check)
-    signal.alarm(0)
-    return fd, s
+        raise
+    finally:
+        signal.alarm(0)
 def guard(fd, offset):
     return os.pread(fd, min(64, offset), max(0, offset-64)).hex()
 fd, s = opened()
@@ -74,8 +93,7 @@ while True:
             last_guard = ''
             continue
         # Recheck access periodically, without opening nonregular replacements.
-        if not os.access('/proc/self/fd/' + str(fd), os.R_OK):
-            raise PermissionError('read access revoked')
+        recheck(fd)
     except FileNotFoundError:
         pass # Drain old descriptor while waiting for rename replacement.
     emit({'kind':'idle'})

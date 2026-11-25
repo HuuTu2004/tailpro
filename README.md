@@ -44,6 +44,8 @@ These workflows have implementation and local validation evidence, with remainin
 4. **Filter and inspect** events; pause the viewport when you need to read.
 5. **Export** a previewed, redacted incident or grant a compatible MCP client access to selected sources.
 
+Saved server profiles reappear in HOSTS after restarting the app. Click Connect to reuse the saved host, user, port, agent and environment; remembered log paths appear after connecting. Double-click a log to start reading. See the [macOS Spring Boot acceptance](docs/process/macos-spring-production-acceptance.md) for live Tailscale validation.
+
 Discovery and streaming are separate actions. Pinning a path does not automatically start reading it.
 
 | Shortcut | Action |

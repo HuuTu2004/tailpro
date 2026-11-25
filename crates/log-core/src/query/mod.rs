@@ -7,6 +7,7 @@ enum Predicate {
     Literal(Needle),
     Field(String, String),
     Duration(Comparison, f64),
+    Time(Comparison, i128),
 }
 #[derive(Clone, Debug)]
 struct Needle {
@@ -224,6 +225,27 @@ impl QueryPlan {
             let predicate = if token.starts_with('"') {
                 Predicate::Literal(Needle::new(unquote(&token)?))
             } else if let Some(rest) = token
+                .strip_prefix("time")
+                .filter(|rest| rest.starts_with([':', '=', '<', '>']))
+            {
+                let (op, value) = [
+                    (">=", Comparison::GreaterEqual),
+                    ("<=", Comparison::LessEqual),
+                    (">", Comparison::Greater),
+                    ("<", Comparison::Less),
+                    ("=", Comparison::Equal),
+                    (":", Comparison::Equal),
+                ]
+                .into_iter()
+                .find_map(|(s, op)| rest.strip_prefix(s).map(|v| (op, v)))
+                .ok_or_else(|| invalid("Time requires a comparison and RFC3339 timestamp"))?;
+                let timestamp = time::OffsetDateTime::parse(
+                    &unquote(value)?,
+                    &time::format_description::well_known::Rfc3339,
+                )
+                .map_err(|_| invalid("Time requires an RFC3339 timestamp with a timezone"))?;
+                Predicate::Time(op, timestamp.unix_timestamp_nanos())
+            } else if let Some(rest) = token
                 .strip_prefix("duration_ms")
                 .or_else(|| token.strip_prefix("duration"))
                 .filter(|rest| rest.starts_with([':', '=', '<', '>']))
@@ -327,8 +349,41 @@ impl QueryPlan {
                 Comparison::Less => v < *n,
                 Comparison::LessEqual => v <= *n,
             }),
+            Predicate::Time(op, n) => display_time_ns(event).is_some_and(|v| match op {
+                Comparison::Equal => v == *n,
+                Comparison::Greater => v > *n,
+                Comparison::GreaterEqual => v >= *n,
+                Comparison::Less => v < *n,
+                Comparison::LessEqual => v <= *n,
+            }),
         }
     }
+}
+
+/// Use the same clock precedence as the viewer's Time column.
+fn display_time_ns(event: &Event) -> Option<i128> {
+    if let Some(value) = event.event_time.as_deref() {
+        return event
+            .evidence
+            .event_time_ns
+            .as_deref()
+            .and_then(|value| value.parse().ok())
+            .or_else(|| rfc3339_ns(value));
+    }
+    if let Some(value) = event.transport_time.as_deref() {
+        return rfc3339_ns(value);
+    }
+    event
+        .observed_at_ms
+        .parse::<i128>()
+        .ok()?
+        .checked_mul(1_000_000)
+}
+
+fn rfc3339_ns(value: &str) -> Option<i128> {
+    time::OffsetDateTime::parse(value, &time::format_description::well_known::Rfc3339)
+        .ok()
+        .map(|value| value.unix_timestamp_nanos())
 }
 
 pub struct Scan<'a> {

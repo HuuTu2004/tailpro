@@ -117,7 +117,8 @@ impl Assembler {
                 t.starts_with("at ")
                     || t.starts_with("Caused by:")
                     || t.starts_with("Suppressed:")
-                    || t.starts_with("... ") && t.ends_with(" more")
+                    || t.starts_with("... ")
+                        && (t.ends_with(" more") || t.ends_with(" common frames omitted"))
             }
             Kind::Php => {
                 let t = text.trim_start();

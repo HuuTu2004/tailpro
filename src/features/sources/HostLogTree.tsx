@@ -2,7 +2,7 @@ import { Icon } from '../../shared/ui/Icon';
 import { Button } from '../../shared/ui/Controls';
 import { useEffect, useRef, useState } from 'react';
 import { listen } from '@tauri-apps/api/event';
-import type { AddLogPathRequest, ConnectionInfo, SourceInfo } from '../../shared/contracts/generated';
+import type { AddLogPathRequest, ConnectionInfo, HostProfile, SourceInfo } from '../../shared/contracts/generated';
 import { native } from '../../shared/client/native';
 import { sourceKey, sourceLabel, sourcePath, type LogSource } from './source-labels';
 import './host-log-tree.css';
@@ -16,10 +16,11 @@ type Props = {
   closing: Set<string>;
   selectHost: (id: string) => void;
   open: (source: LogSource) => void;
+  connect: (host: HostProfile) => Promise<void>;
   manageConnections: () => void;
 };
 const HISTORY_LIMIT = 128;
-export function HostLogTree({ connections, sources, selectedHost, scope, opening, closing, selectHost, open, manageConnections }: Props) {
+export function HostLogTree({ connections, sources, selectedHost, scope, opening, closing, selectHost, open, connect, manageConnections }: Props) {
   const [known, setKnown] = useState<Map<string, LogSource>>(new Map());
   const [pins, setPins] = useState<Record<string, string[]>>({});
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -27,6 +28,8 @@ export function HostLogTree({ connections, sources, selectedHost, scope, opening
   const [filter, setFilter] = useState('');
   const [editorReady, setEditorReady] = useState(false);
   const [pathError, setPathError] = useState('');
+  const [connecting, setConnecting] = useState<Set<string>>(new Set());
+  const connectingRef = useRef(new Set<string>());
   const addRequestedPath = useRef<(hostId: string, path: string) => string | null>(() => 'The host navigator is not ready.');
   const rememberAfterRead = useRef(new Set<string>());
   const hostsKey = connections.map(host => `${host.host.id}:${host.state}`).join('|');
@@ -90,6 +93,12 @@ export function HostLogTree({ connections, sources, selectedHost, scope, opening
     return () => { alive = false; };
   }, [readerStates]);
   const needle = filter.trim().toLowerCase();
+  async function reconnect(host: HostProfile) {
+    if (connectingRef.current.has(host.id)) return;
+    connectingRef.current.add(host.id); setConnecting(new Set(connectingRef.current)); selectHost(host.id);
+    try { await connect(host); }
+    finally { connectingRef.current.delete(host.id); setConnecting(new Set(connectingRef.current)); }
+  }
   async function startAdding(hostId: string) {
     selectHost(hostId); setExpanded(previous => new Set([...previous, hostId])); setPathError('');
     try { await native.openLogPathEditor(hostId); }
@@ -130,16 +139,17 @@ export function HostLogTree({ connections, sources, selectedHost, scope, opening
         return <div className="log-tree-host" key={host.id}>
           <div className={'log-tree-host-heading' + (selectedHost === host.id ? ' selected' : '')}>
             <Button className="log-tree-host-toggle" aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${host.target} logs`} aria-expanded={isExpanded} title={`${host.target} · ${host.environment} · ${hostEntries.length} known logs`} onClick={() => { selectHost(host.id); setExpanded(previous => { const next = new Set(previous); if (isExpanded) next.delete(host.id); else next.add(host.id); return next; }); }}><span className="tree-chevron" aria-hidden="true"><Icon name={isExpanded ? 'chevron-down' : 'chevron-right'}/></span><span className={'dot ' + connection.state}/><strong>{host.target}</strong>{host.environment === 'production' && <span className="tree-prod" aria-label="Production" title="Production">●</span>}<span className="tree-log-count">{hostEntries.length}</span></Button>
-            <Button className="log-tree-add" aria-label={`Add log to ${host.target}`} title="Add a log path" disabled={!editorReady} onClick={() => startAdding(host.id)}>+</Button>
+            <Button className="log-tree-add" aria-label={`Add log to ${host.target}`} title={connection.state === 'connected' ? 'Add a log path' : 'Connect this host to add a log'} disabled={!editorReady || connection.state !== 'connected'} onClick={() => startAdding(host.id)}>+</Button>
           </div>
+          {connection.state !== 'connected' && <div className="log-tree-connection"><span title={connection.detail ?? `${host.user ? `${host.user}@` : ''}${host.target}:${host.port ?? 22}`}>{connection.state === 'disconnected' ? 'Saved · Disconnected' : connection.state.replaceAll('_', ' ')}</span>{(connection.state === 'disconnected' || connection.state === 'needs_action') && <Button className="log-tree-connect" aria-label={`Connect to ${host.target}`} disabled={connecting.has(host.id)} onClick={() => void reconnect(host)}>{connecting.has(host.id) ? 'Connecting…' : 'Connect'}</Button>}</div>}
           {isExpanded && <div className="log-tree-children" role="group" aria-label={`${host.target} logs`}>
             {visible.map(([key, entry]) => {
               const reading = active.get(key);
               const isOpening = opening.has(key);
               const isClosing = reading ? closing.has(reading.id) : false;
-              return <Button className={'log-tree-source' + (reading && scope.includes(reading.id) ? ' active' : '') + (focused === key ? ' focused' : '')} key={key} title={`${sourcePath(entry.spec)}\n${isClosing ? 'Stopping…' : isOpening ? 'Starting…' : reading ? reading.state.replaceAll('_', ' ') : 'Double-click or press Enter to start reading'}`} aria-label={`${sourceLabel(entry.spec)} on ${host.target}${host.environment === 'production' ? ', Production' : ''}${reading ? ', reading' : ', closed'}`} disabled={isOpening || isClosing} onClick={() => { setFocused(key); selectHost(host.id); }} onDoubleClick={() => open(entry)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); open(entry); } }}><span className={'tree-source-state' + (reading ? ' reading' : '')} aria-hidden="true">{isOpening || isClosing ? '…' : <Icon name={entry.spec.kind === 'file' ? 'sources' : entry.spec.kind}/>}</span><span>{sourceLabel(entry.spec)}</span>{reading && <i className={'tree-reading-mark' + (/error|fail|needs_action/i.test(reading.state) ? ' attention' : '')} aria-label={reading.state}/>}</Button>;
+              return <Button className={'log-tree-source' + (reading && scope.includes(reading.id) ? ' active' : '') + (focused === key ? ' focused' : '')} key={key} title={`${sourcePath(entry.spec)}\n${isClosing ? 'Stopping…' : isOpening ? 'Starting…' : reading ? reading.state.replaceAll('_', ' ') : 'Double-click or press Enter to start reading'}`} aria-label={`${sourceLabel(entry.spec)} on ${host.target}${host.environment === 'production' ? ', Production' : ''}${reading ? ', reading' : ', closed'}`} disabled={isOpening || isClosing || connection.state !== 'connected'} onClick={() => { setFocused(key); selectHost(host.id); }} onDoubleClick={() => open(entry)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); open(entry); } }}><span className={'tree-source-state' + (reading ? ' reading' : '')} aria-hidden="true">{isOpening || isClosing ? '…' : <Icon name={entry.spec.kind === 'file' ? 'sources' : entry.spec.kind}/>}</span><span>{sourceLabel(entry.spec)}</span>{reading && <i className={'tree-reading-mark' + (/error|fail|needs_action/i.test(reading.state) ? ' attention' : '')} aria-label={reading.state}/>}</Button>;
             })}
-            {!visible.length && <p className="log-tree-empty">{needle ? 'No matching logs' : 'No logs added yet'}</p>}
+            {!visible.length && <p className="log-tree-empty">{needle ? 'No matching logs' : connection.state === 'connected' ? 'No logs added yet' : 'Connect to view remembered logs.'}</p>}
           </div>}
         </div>;
       })}

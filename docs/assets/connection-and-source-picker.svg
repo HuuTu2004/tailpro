@@ -1,0 +1,124 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="940" viewBox="0 0 1600 940" role="img" aria-labelledby="title description">
+  <title id="title">TailPro — proposed connection and source picker</title>
+  <desc id="description">Two proposed native windows: a simple SSH connection form and a source picker with discovery, folder browsing, manual paths, source selection and an Open selected action. All names are illustrative; runtime data comes from the server.</desc>
+  <defs>
+    <style>
+      text { font-family: 'DejaVu Sans', sans-serif; font-size: 15px; fill: #e5e8eb; }
+      .muted { fill: #a6afb6; font-size: 13px; }
+      .small { font-size: 12px; }
+      .label { font-size: 13px; }
+      .title { font-size: 21px; font-weight: 600; }
+      .heading { font-size: 16px; font-weight: 600; }
+      .mono { font-family: 'DejaVu Sans Mono', monospace; font-size: 13px; }
+      .accent { fill: #bfddcc; }
+      .panel { fill: #1b1e21; stroke: #3e464e; }
+      .field { fill: #131618; stroke: #49535c; }
+      .rule { stroke: #363e45; }
+      .primary { fill: #c6dfce; }
+      .primary-text { fill: #18231b; font-weight: 600; }
+    </style>
+  </defs>
+  <rect width="1600" height="940" fill="#111416"/>
+  <text x="32" y="41" class="title">TailPro · Kết nối → Chọn log → Mở để đọc</text>
+  <text x="32" y="68" class="muted">Thiết kế đề xuất · Dữ liệu và khả năng đọc được xác định từ từng server</text>
+
+  <text x="32" y="111" class="heading">01 · Kết nối</text>
+  <rect x="32" y="132" width="388" height="694" rx="8" class="panel"/>
+  <text x="54" y="163" class="heading">Connect to server</text>
+  <text x="393" y="163" class="muted">×</text>
+  <path d="M32 180H420" class="rule"/>
+  <text x="56" y="212" class="label">Saved connection</text>
+  <rect x="56" y="224" width="340" height="40" rx="4" class="field"/>
+  <text x="68" y="249">New connection</text><text x="375" y="249" class="muted">⌄</text>
+  <text x="56" y="294" class="label">Host / SSH alias</text>
+  <rect x="56" y="306" width="340" height="40" rx="4" class="field"/>
+  <text x="68" y="331" class="muted">Hostname or SSH alias</text>
+  <text x="56" y="375" class="label">User</text>
+  <rect x="56" y="387" width="340" height="40" rx="4" class="field"/>
+  <text x="68" y="412" class="muted">From SSH config</text>
+  <text x="56" y="457" class="label">Authentication</text>
+  <rect x="56" y="469" width="340" height="40" rx="4" class="field"/>
+  <text x="68" y="494">SSH config / agent</text><text x="375" y="494" class="muted">⌄</text>
+  <text x="56" y="534" class="muted">Other methods: private key · password</text>
+  <text x="56" y="581" class="muted">› Advanced SSH options</text>
+  <text x="56" y="607" class="muted small">Port · jump host · agent · environment</text>
+  <path d="M56 636H396" class="rule"/>
+  <text x="56" y="665" class="muted">Profile remembered on this device.</text>
+  <text x="56" y="688" class="muted">Secrets are not saved in settings.</text>
+  <rect x="56" y="730" width="106" height="42" rx="4" class="field"/>
+  <text x="81" y="757">Cancel</text>
+  <rect x="178" y="730" width="218" height="42" rx="4" class="primary"/>
+  <text x="250" y="757" class="primary-text">Connect</text>
+  <text x="56" y="800" class="muted small">Fingerprint / auth challenges appear if needed.</text>
+
+  <path d="M435 465H458m-7-7 7 7-7 7" fill="none" stroke="#a6afb6" stroke-width="2"/>
+  <text x="472" y="111" class="heading">02 · Chọn nguồn muốn đọc</text>
+  <rect x="472" y="132" width="1096" height="694" rx="8" class="panel"/>
+  <text x="496" y="163" class="heading">Open logs</text><text x="1540" y="163" class="muted">×</text>
+  <path d="M472 180H1568" class="rule"/>
+  <circle cx="501" cy="207" r="4" fill="#bfddcc"/>
+  <text x="514" y="212">Selected server</text>
+  <text x="680" y="212" class="muted">SSH connected · Reader capabilities checked</text>
+  <text x="1490" y="212" class="muted">Details</text>
+  <path d="M472 232H1568" class="rule"/>
+  <rect x="488" y="246" width="166" height="37" rx="4" fill="#303a35"/>
+  <text x="505" y="270" class="accent">Found sources</text>
+  <text x="681" y="270" class="muted">Browse folders</text>
+  <text x="864" y="270" class="muted">Enter path</text>
+  <path d="M472 296H1568" class="rule"/>
+  <rect x="496" y="312" width="1024" height="40" rx="4" class="field"/>
+  <circle cx="514" cy="331" r="6" fill="none" stroke="#a6afb6"/>
+  <path d="m518 336 5 5" stroke="#a6afb6"/>
+  <text x="535" y="337" class="muted">Search found sources…</text>
+  <text x="496" y="383" class="muted">Locations</text>
+  <rect x="577" y="363" width="262" height="30" rx="4" fill="#262c30"/>
+  <text x="589" y="383" class="muted">Folder chosen by user     ×</text>
+  <text x="863" y="383" class="accent">+ Add location</text>
+  <text x="1450" y="383" class="muted">Refresh</text>
+  <path d="M496 408H1544" class="rule"/>
+  <text x="518" y="435" class="muted">Source</text>
+  <text x="1048" y="435" class="muted">Type</text>
+  <text x="1170" y="435" class="muted">Activity</text>
+  <text x="1405" y="435" class="muted">Access</text>
+  <path d="M496 451H1544" class="rule"/>
+
+  <rect x="496" y="452" width="1048" height="64" fill="#202c26"/>
+  <rect x="511" y="475" width="18" height="18" rx="3" fill="#c6dfce"/>
+  <path d="m515 483 4 4 7-8" fill="none" stroke="#18231b" stroke-width="2"/>
+  <text x="548" y="480" class="mono">application.log</text>
+  <text x="548" y="502" class="muted small">Selected folder · regular file</text>
+  <text x="1048" y="489" class="muted">File</text>
+  <text x="1170" y="489" class="muted">Observed growth</text>
+  <text x="1405" y="489" class="accent">Readable</text>
+  <path d="M496 517H1544" class="rule"/>
+  <rect x="496" y="518" width="1048" height="64" fill="#202c26"/>
+  <rect x="511" y="541" width="18" height="18" rx="3" fill="#c6dfce"/>
+  <path d="m515 549 4 4 7-8" fill="none" stroke="#18231b" stroke-width="2"/>
+  <text x="548" y="546" class="mono">audit.log</text>
+  <text x="548" y="568" class="muted small">Selected folder · regular file</text>
+  <text x="1048" y="555" class="muted">File</text>
+  <text x="1170" y="555" class="muted">Recently modified</text>
+  <text x="1405" y="555" class="accent">Readable</text>
+  <path d="M496 583H1544" class="rule"/>
+  <rect x="511" y="607" width="18" height="18" rx="3" class="field"/>
+  <text x="548" y="612" class="mono">worker.log</text>
+  <text x="548" y="634" class="muted small">Selected folder · regular file</text>
+  <text x="1048" y="621" class="muted">File</text>
+  <text x="1170" y="621" class="muted">Unknown</text>
+  <text x="1405" y="621" class="accent">Readable</text>
+  <path d="M496 649H1544" class="rule"/>
+  <text x="513" y="681" class="muted">› Older files</text>
+  <text x="1444" y="681" class="muted">Show</text>
+  <path d="M472 707H1568" class="rule"/>
+  <text x="496" y="734" class="muted">Scanned selected locations · metadata only</text>
+  <text x="496" y="756" class="muted small">Unreadable / unscanned locations appear here with a reason and next action.</text>
+  <text x="496" y="795" class="muted">2 sources selected</text>
+  <rect x="1226" y="770" width="106" height="38" rx="4" class="field"/>
+  <text x="1251" y="795">Cancel</text>
+  <rect x="1348" y="770" width="196" height="38" rx="4" class="primary"/>
+  <text x="1370" y="795" class="primary-text">Open selected (2)</text>
+
+  <text x="32" y="869" class="heading">Lần sau: chọn server đã lưu → Connect → mở nguồn đã nhớ</text>
+  <text x="32" y="896" class="muted">Các tên và hàng trong hình chỉ minh họa bố cục. OS, công cụ, thư mục, quyền và nguồn log đều do backend xác định cho từng host.</text>
+  <text x="32" y="921" class="muted small">Proposed design · Authentication mới và Open logs picker chưa được triển khai vào runtime hiện tại.</text>
+</svg>
