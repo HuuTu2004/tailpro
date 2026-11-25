@@ -35,8 +35,7 @@ pub fn runtime_dir() -> Result<PathBuf> {
         private(&p, 0o700)?;
         p
     } else {
-        let home = PathBuf::from(std::env::var_os("HOME").ok_or_else(denied)?);
-        home
+        PathBuf::from(std::env::var_os("HOME").ok_or_else(denied)?)
     };
     let path = base.join(".tailpro-bridge");
     create_private(&path)?;
