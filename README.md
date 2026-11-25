@@ -53,7 +53,7 @@ The + beside a host opens the log picker. Saved profiles can be edited through t
 
 ## Run from source
 
-Install [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) for your OS, Rust stable (1.89+), Node.js 22.12+ and npm. Then:
+Install [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) for your OS, Rust 1.97.1 (pinned in `rust-toolchain.toml`), Node.js 22.12+ and npm. Then:
 
 ```bash
 npm ci
@@ -70,7 +70,7 @@ npm run tauri build -- --locked
 cargo build -p tailpro-mcp --release --locked
 ```
 
-Bundles are in `target/release/bundle/`. The [release workflow](.github/workflows/release.yml) builds Windows x64, Linux x64, macOS ARM64 and macOS x64, then publishes a tagged release only after every build succeeds. Release assets include SHA-256 checksums.
+Bundles are in `target/release/bundle/`. The [release workflow](.github/workflows/release.yml) builds Windows x64, Linux x64, macOS ARM64 and macOS x64, then creates a release tag and publishes only after every build succeeds. Release assets include SHA-256 checksums.
 
 ## Development and validation
 

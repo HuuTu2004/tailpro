@@ -34,7 +34,7 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.97.1
         with:
           components: rustfmt,clippy
       - uses: Swatinem/rust-cache@v2
@@ -64,7 +64,6 @@ jobs:
           if-no-files-found: error
           retention-days: 14
   publish:
-    if: startsWith(github.ref, 'refs/tags/')
     needs: build
     runs-on: ubuntu-24.04
     permissions:
@@ -78,7 +77,9 @@ jobs:
       - name: Checksums
         working-directory: release-assets
         run: sha256sum * > SHA256SUMS.txt
+      - name: Release version
+        run: echo "RELEASE_TAG=v$(node -p "require('./src-tauri/tauri.conf.json').version")" >> "$GITHUB_ENV"
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${{ github.ref_name }}" release-assets/* --verify-tag --title "TailPro ${{ github.ref_name }} Preview" --notes-file docs/release-notes.md --prerelease
+        run: gh release create "$RELEASE_TAG" release-assets/* --target "${{ github.sha }}" --title "TailPro $RELEASE_TAG Preview" --notes-file docs/release-notes.md --prerelease

@@ -33,7 +33,7 @@ Nút + cạnh host mở bộ chọn log. Quét chỉ đọc metadata có giới 
 
 ## Build từ source
 
-Cài [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) cho hệ điều hành đang dùng, Rust stable 1.89+, Node.js 22.12+ và npm:
+Cài [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) cho hệ điều hành đang dùng, Rust 1.97.1 (đã pin trong rust-toolchain.toml), Node.js 22.12+ và npm:
 
 ```bash
 npm ci

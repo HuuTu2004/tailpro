@@ -105,6 +105,8 @@ function App() {
     const generation = ++statusGeneration.current;
     const next = await native.status();
     if (!alive.current || generation !== statusGeneration.current) return;
+    readerOrder.current = [...new Set([...readerOrder.current, ...next.sources.map(row => row.id)])].filter(id => next.sources.some(row => row.id === id));
+    next.sources.sort((a, b) => readerOrder.current.indexOf(a.id) - readerOrder.current.indexOf(b.id));
     statusRef.current = next; setStatus(next);
     return next;
   }
@@ -128,8 +130,8 @@ function App() {
     const stops: (() => void)[] = [];
     async function loadWorkspace() { const saved = await native.savedWorkspace(); if (mounted) { workspace.current = saved; if (saved.selected_host) setSelected(saved.selected_host); } }
     async function opened(host: string, ids: string[]) {
-      const next = await refreshStatus(); if (!mounted || !next || !ids.length) return;
       readerOrder.current = [...new Set([...readerOrder.current, ...ids])];
+      const next = await refreshStatus(); if (!mounted || !next || !ids.length) return;
       setSelected(host); setScope(ids); setPage('workspace');
     }
     const catchError = (reason: unknown) => { if (mounted) setError(String(reason)); };

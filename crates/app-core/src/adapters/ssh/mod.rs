@@ -244,7 +244,16 @@ impl Session {
                 }
                 tail.extend_from_slice(&chunk[..n]);
                 let text = String::from_utf8_lossy(&tail).to_ascii_lowercase();
-                let value = if [
+                let value = if text.contains("identification has changed") {
+                    3
+                } else if text.contains("host key verification failed") {
+                    4
+                } else if ["no such identity", "bad configuration", "bad owner"]
+                    .iter()
+                    .any(|value| text.contains(value))
+                {
+                    5
+                } else if [
                     "permission denied",
                     "host key verification failed",
                     "identification has changed",
@@ -271,8 +280,8 @@ impl Session {
                 } else {
                     0
                 };
-                if value == 1
-                    || (value == 2 && flags.load(std::sync::atomic::Ordering::Relaxed) != 1)
+                if value > 0
+                    && (value != 2 || flags.load(std::sync::atomic::Ordering::Relaxed) == 0)
                 {
                     flags.store(value, std::sync::atomic::Ordering::Relaxed);
                 }
@@ -413,10 +422,13 @@ impl Session {
             if self.master.lock().await.try_wait()?.is_some() {
                 let _ =
                     tokio::time::timeout(Duration::from_millis(100), &mut self.diagnostic).await;
-                if self.failure.load(std::sync::atomic::Ordering::Relaxed) == 2 {
-                    return Err(std::io::Error::from(std::io::ErrorKind::ConnectionAborted).into());
-                }
-                return Err(Error::NeedsAction("SSH authentication/host-key/config failed. Verify the host with your SSH client; TailPro never accepts host keys automatically.".into()));
+                return match self.failure.load(std::sync::atomic::Ordering::Relaxed) {
+                    2 => Err(std::io::Error::from(std::io::ErrorKind::ConnectionAborted).into()),
+                    3 => Err(Error::NeedsAction("The server host key changed. Verify the new fingerprint with the server administrator; existing trust was preserved.".into())),
+                    4 => Err(Error::NeedsAction("Host key verification failed. Verify the server fingerprint and configured known_hosts files before retrying.".into())),
+                    5 => Err(Error::NeedsAction("SSH configuration or private-key file is unavailable or has unsafe permissions. Check the selected key and SSH configuration.".into())),
+                    _ => Err(Error::NeedsAction("SSH authentication failed. Check the user, key/agent or interactive credentials, then retry.".into())),
+                };
             }
             if self.socket.exists() || self.ready.load(std::sync::atomic::Ordering::Acquire) {
                 return Ok(());
