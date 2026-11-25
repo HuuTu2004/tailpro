@@ -3,7 +3,7 @@ use std::sync::Mutex;
 use tauri::Manager;
 struct BridgeState(Mutex<Option<app_core::application::bridge::Bridge>>);
 pub fn run() {
-    let app = tauri::Builder::default()
+    let app = tauri::Builder::default().plugin(tauri_plugin_dialog::init())
         .on_window_event(|window, event| {
             let app = window.app_handle();
             match event {
@@ -13,6 +13,10 @@ pub fn run() {
                     api.prevent_close();
                     let _ = window.hide();
                 }
+                tauri::WindowEvent::CloseRequested { .. } if window.label() == "log-path-editor" => {
+                    if let Some(editor) = app.get_webview_window("log-path-editor") { if let Ok(host) = super::log_path_window::editor_host(&editor) { app.state::<AppHandle>().cancel_discovery(&host); app.state::<AppHandle>().cancel_source_open(&host); } }
+                }
+                tauri::WindowEvent::CloseRequested { .. } if window.label() == "connection-editor" => { app.state::<AppHandle>().cancel_connection_attempt(); }
                 tauri::WindowEvent::Destroyed if matches!(window.label(), "connections-manager" | "settings-manager" | "connection-editor" | "log-path-editor") => {
                     super::windows::manager_closed(app, window.label());
                 }
@@ -29,6 +33,23 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            super::connection_sources::begin_connection,
+            super::connection_sources::connection_attempt,
+            super::connection_sources::answer_authentication,
+            super::connection_sources::cancel_connection_attempt,
+            super::connection_sources::pick_identity_file,
+            super::connection_sources::forget_host,
+            super::connection_sources::inspect_host,
+            super::connection_sources::browse_directory,
+            super::connection_sources::discovery_preferences,
+            super::connection_sources::save_discovery_preferences,
+            super::connection_sources::remembered_sources,
+            super::connection_sources::open_sources,
+            super::connection_sources::cancel_source_open,
+            super::connection_sources::saved_workspace,
+            super::connection_sources::save_workspace,
+            super::connection_sources::set_restore_readers,
+            super::connection_sources::restore_host_sources,
             super::windows::open_workspace_manager,
             super::windows::close_workspace_manager,
             super::log_path_window::open_log_path_editor,

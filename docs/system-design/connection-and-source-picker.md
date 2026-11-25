@@ -1,6 +1,7 @@
 # Kết nối server và chọn log
 
-**Trạng thái: thiết kế đề xuất, 25/11/2026. Chưa triển khai vào runtime.** Phạm vi: trải nghiệm1.2/1.7, capability preflight và lưu lựa chọn. Thiết kế kế thừa [architecture](architecture.md), [contracts](contracts.md) và [phase1](../plan/phase-01-core-ssh-sources.md); những thay đổi contract bên dưới chỉ có hiệu lực khi implementation được nghiệm thu. Không thay authentication/discovery hiện có chỉ bằng cập nhật tài liệu này.
+**Trạng thái: đã triển khai luồng chính, 25/11/2026; nghiệm thu từng nền tảng đang được ghi ở [current status](../process/current-status.md).** Phạm vi1.2/1.7: form auth theo attempt, preflight capability, picker metadata và lưu lựa chọn. Client Windows dùng native OpenSSH với key/agent và các channel riêng; interactive auth chỉ trên Unix. Không coi build package là chứng nhận mọi runtime gate.
+
 
 ## Mục tiêu và luồng chính
 
@@ -29,11 +30,11 @@ Cửa sổ native Connect mặc định có Saved connection, Host / SSH alias, 
 | Private key | Chọn file trên máy đang chạy TailPro bằng native file picker | Đường dẫn file và tùy chọn định danh; không lưu nội dung key |
 | Password / interactive | Hỏi thông tin trong challenge của đúng lần kết nối; hỗ trợ nhiều bước khi server yêu cầu | Không lưu password, OTP hoặc passphrase trong settings/history |
 
-Password/interactive là capability mới, **chưa có ở implementation hiện tại**. Phải có module xử lý authentication challenges theo connection attempt, có cancel/deadline và không đưa secrets vào argv, logs, IPC diagnostics hoặc frontend persistence. BatchMode không được bật cố định cho attempt cần interactive authentication; các reader tiếp tục dùng phiên đã xác thực. Không mở terminal shell chung để workaround prompt. OS credential store là một tùy chọn triển khai riêng, không mặc nhiên hứa Remember password.
+Password/interactive đã có connection-scoped askpass bridge trên client Unix; Windows từ chối phương thức này với hướng dẫn dùng key/agent. Phải có module xử lý authentication challenges theo connection attempt, có cancel/deadline và không đưa secrets vào argv, logs, IPC diagnostics hoặc frontend persistence. BatchMode không được bật cố định cho attempt cần interactive authentication; các reader tiếp tục dùng phiên đã xác thực. Không mở terminal shell chung để workaround prompt. OS credential store là một tùy chọn triển khai riêng, không mặc nhiên hứa Remember password.
 
 Jump host kế thừa từ OpenSSH alias; structured editor chỉ cung cấp các trường xác thực rõ ràng, không nhận shell command tùy ý. Dynamic execution trong SSH config vẫn cần consent cho session. Hủy form hủy đúng attempt, không ngắt kết nối khác.
 
-Server mới cần bước xác minh fingerprint trước khi gửi credentials. Hiển thị hostname/port/key type/fingerprint và yêu cầu đối chiếu nguồn tin cậy; không tự trust kết quả dò key. Pin đã được user xác nhận lưu vào trust store cục bộ có scope rõ, vẫn dùng strict checking. Host key thay đổi chặn connect và giải thích riêng, không chung lỗi authentication. Trust workflow này cần implementation/security review riêng trước khi thay onboarding hiện tại.
+Server mới cần bước xác minh fingerprint trước khi gửi credentials. Hiển thị hostname/port/key type/fingerprint và yêu cầu đối chiếu nguồn tin cậy; không tự trust kết quả dò key. Pin đã được user xác nhận lưu vào trust store cục bộ có scope rõ, vẫn dùng strict checking. Host key thay đổi chặn connect và giải thích riêng, không chung lỗi authentication. Trust store riêng theo profile dùng strict checking; challenge yêu cầu nhập lại đúng fingerprint và xác nhận đã đối chiếu. Challenge bridge chỉ bind loopback, có token ngẫu nhiên128bit, giới hạn frame/prompt, cancel và deadline; không lưu secret sau attempt.
 
 Connect hiển thị các bước Authenticating → Checking readers → Finding sources. Kết quả SSH authenticated tách khỏi khả năng đọc file/Docker/Journal. Cửa sổ không đóng rồi âm thầm thất bại sau khi user tưởng đã kết nối xong; lỗi giữ draft và nút Retry đúng bước.
 
@@ -144,3 +145,9 @@ Keyboard: Tab theo thứ tự, Space chọn checkbox, Enter mở selection, Esca
 Manual acceptance theo quy định repo: Linux/Mac; custom log directory không tên logs; space/quote/Unicode; missing Python/tool, tool ngoài noninteractive PATH, daemon absent/permission denied; symlink resolved scope; nhiều archive và file nén; cancel/switch/stale result; key/agent/alias/jump và secret-free auth errors; batch open có partial failure; restart giữ profile/scopes nhưng không giả connected hoặc leak grants. Build/lint/typecheck/contracts cần đạt; không tạo automated tests nếu user chưa yêu cầu.
 
 Thiết kế không tự đóng các runtime/release gates hiện còn PARTIAL. Hình minh họa: [connection-and-source-picker.svg](../assets/connection-and-source-picker.svg); tên/rows trong hình là ví dụ thiết kế, không dữ liệu runtime.
+
+## Phạm vi phát hành0.1.0
+
+Picker hiện cung cấp Found sources/Browse folders/Enter path, Up/current path, paging64entries, cache30s gắn host identity và kiểm tra revision trước trang kế tiếp; scan tối đa16locations, directory metadata tối đa1000entries/256KiB. Phần config/PID nâng cao vẫn có backend opt-in, chưa đưa thêm controls vào picker gọn này. File nén bị chặn trước khi Start. Chỉ lưu profile sau authentication/preflight thành công; Test không thay active connection. Open selected báo kết quả từng source; đóng picker hủy phần chưa mở, giữ reader đã chạy. Reader tối đa8; lịch sử source tối đa100/host,800global. Khôi phục chỉ sau user reconnect và opt-in, có kiểm tra remote identity.
+
+Main HOSTS chỉ giữ một nút + cho Open logs; không thêm nút ⋯ hay Connect cạnh host. Bấm host đã lưu để mở form reconnect. Connections form quản lý bản nháp/edit; danh sách Connections có Forget. Chọn cột/time/status không thêm controls khác vào hàng viewer.

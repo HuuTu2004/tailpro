@@ -1,4 +1,5 @@
 mod agent_context;
+mod authentication;
 pub mod bridge;
 mod connection_profiles;
 mod explainer;
@@ -7,6 +8,7 @@ mod parsing;
 pub mod policy;
 mod production;
 pub mod redaction;
+mod source_selection;
 mod topology;
 mod views;
 use crate::{
@@ -67,6 +69,8 @@ pub struct AppHandle {
     output: output::Outputs,
     connection_tests: Arc<tokio::sync::Semaphore>,
     connection_test_cancel: Arc<Mutex<Option<CancellationToken>>>,
+    source_selection: source_selection::SourceSelection,
+    authentication: authentication::AuthenticationState,
 }
 impl AppHandle {
     pub fn new(settings_path: PathBuf) -> Self {
@@ -82,6 +86,8 @@ impl AppHandle {
             output: output::Outputs::new(),
             connection_tests: Arc::new(tokio::sync::Semaphore::new(1)),
             connection_test_cancel: Arc::new(Mutex::new(None)),
+            source_selection: source_selection::SourceSelection::default(),
+            authentication: authentication::AuthenticationState::default(),
             cancel,
             settings: Arc::new(Mutex::new(SettingsStore::new(settings_path))),
         }
@@ -140,12 +146,15 @@ impl AppHandle {
         }));
         let cancel = self.cancel.child_token();
         let (tx, _) = watch::channel(None);
+        let trust_file = Some(self.trust_file(&profile)?);
         let task = tokio::spawn(connection_loop(
             profile,
             info.clone(),
             tx.clone(),
             cancel.clone(),
             consent,
+            None,
+            trust_file,
         ));
         state.hosts.insert(
             info.lock().unwrap().host.id.clone(),
@@ -467,6 +476,7 @@ impl AppHandle {
         store.save(&saved)
     }
     pub async fn shutdown(&self) {
+        self.cancel_connection_attempt();
         self.views.cancel_all();
         self.output.clear();
         let hosts: Vec<_> = self.state.lock().unwrap().hosts.keys().cloned().collect();
@@ -482,6 +492,8 @@ async fn connection_loop(
     sessions: watch::Sender<Option<Arc<Session>>>,
     cancel: CancellationToken,
     consent: bool,
+    mut initial: Option<Arc<Session>>,
+    trust_file: Option<PathBuf>,
 ) {
     let mut started = Instant::now();
     let mut attempt = 0;
@@ -489,9 +501,21 @@ async fn connection_loop(
         if cancel.is_cancelled() {
             break;
         }
-        match Session::connect(profile.clone(), cancel.child_token(), consent).await {
+        let connected = if let Some(session) = initial.take() {
+            Ok(session)
+        } else {
+            Session::connect_managed(
+                profile.clone(),
+                cancel.child_token(),
+                consent,
+                trust_file.clone(),
+                None,
+            )
+            .await
+            .map(Arc::new)
+        };
+        match connected {
             Ok(session) => {
-                let session = Arc::new(session);
                 sessions.send_replace(Some(session.clone()));
                 {
                     let mut i = info.lock().unwrap();
@@ -520,10 +544,10 @@ async fn connection_loop(
                     return;
                 }
             }
-            Err(Error::NeedsAction(_)) => {
+            Err(Error::NeedsAction(reason)) => {
                 let mut i = info.lock().unwrap();
                 i.state = ConnectionState::NeedsAction;
-                i.detail = Some("Verify known_hosts, static SSH config, agent socket and noninteractive authentication with your SSH client".into());
+                i.detail = Some(reason);
                 return;
             }
             Err(_) if cancel.is_cancelled() => break,

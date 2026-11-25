@@ -1,5 +1,5 @@
 # Metadata-only unless exact config capability is explicitly supplied.
-import os, sys, stat, json, time, signal, shlex, subprocess, selectors, re, fnmatch
+import os, sys, stat, json, time, signal, shlex, subprocess, selectors, re, fnmatch, platform, shutil
 p = json.loads(sys.argv[1])
 def interrupted(signum, frame):
     raise TimeoutError('bounded probe interrupted')
@@ -14,7 +14,6 @@ seen = set()
 identities = set()
 config_bytes = 0
 config_seen = set()
-identities = set()
 observations = {}
 def send(obj):
     global output
@@ -46,7 +45,11 @@ def candidate(path, provider, provenance, tag=None):
     except FileNotFoundError: access = 'missing'
     except OSError: pass
     candidates += 1
-    send({'file_type':'regular_file','confidence':'configured_hint' if provider in ('nginx','caddy','supervisor','systemd') else 'metadata','process_hint':provenance if provider=='process_fd' else None,'identity':identity,'path':path, 'provider':provider, 'provenance':provenance, 'access':access, 'size':size, 'mtime':mtime, 'tags':[tag] if tag else [], 'activity':'Opened' if provider == 'process_fd' else ('Recently modified' if mtime and 0 <= time.time()-int(mtime)/1e9 <= 7*86400 else 'Unknown')})
+    compressed = path.lower().endswith(('.gz','.bz2','.xz','.zip','.zst','.lz4'))
+    archive = compressed or bool(re.search(r'(?:\.\d+(?:\.log)?$|\d{4}[-_]\d{2}[-_]\d{2}|/archive(?:s)?/)', path))
+    tags = ([tag] if tag else []) + (['archive_hint'] if archive else [])
+    if compressed: access = 'unsupported'
+    send({'file_type':'compressed_archive' if compressed else 'regular_file','confidence':'configured_hint' if provider in ('nginx','caddy','supervisor','systemd') else 'metadata','process_hint':provenance if provider=='process_fd' else None,'identity':identity,'path':path, 'provider':provider, 'provenance':provenance, 'access':access, 'size':size, 'mtime':mtime, 'tags':tags, 'activity':'Opened' if provider == 'process_fd' else ('Recently modified' if mtime and 0 <= time.time()-int(mtime)/1e9 <= 7*86400 else 'Unknown')})
 def scan(root, depth, provider, prefix=''):
     global entries
     if capped(): reasons.add('entry/deadline cap'); return
@@ -84,7 +87,9 @@ def command(args, limit=256*1024):
         if len(data) >= limit: reasons.add('provider output cap')
         if time.monotonic() >= until: reasons.add('provider timeout')
     finally:
-        child.kill(); child.wait(); child.stdout.close(); selector.close()
+        try: child.wait(timeout=0.2)
+        except subprocess.TimeoutExpired: child.kill(); child.wait()
+        child.stdout.close(); selector.close()
     if child.returncode != 0: reasons.add('provider denied/unavailable: '+args[0])
     return bytes(data)
 def configured(path, provider):
@@ -169,18 +174,24 @@ def config(path, depth=0):
                 if any(c in inc for c in '$%'): reasons.add('nginx dynamic include unresolved')
                 else: includes(inc if inc.startswith('/') else os.path.join(os.path.dirname(path),inc), depth+1)
     else: reasons.add('unsupported config provider')
-if p.get('complete'):
-    scan(p['parent'], 0, 'completion', p['prefix'])
-else:
-    if p.get('docker'):
-        fmt = '{{.ID}}\t{{.Names}}\t{{.Label "com.docker.compose.project"}}\t{{.Label "com.docker.compose.service"}}'
-        for line in command(['docker','ps','--last','500','--filter','status=running','--no-trunc','--format',fmt]).decode('utf-8','replace').splitlines()[:500]:
-            fields = line.split('\t')
-            if len(fields) != 4 or not re.fullmatch('[a-fA-F0-9]{64}',fields[0]): continue
-            if candidates >= 500: reasons.add('candidate cap'); break
-            candidates += 1
-            send({'file_type':'container','confidence':'metadata','identity':fields[0],'path':fields[1], 'provider':'docker', 'provenance':'Docker running-container metadata', 'container_id':fields[0], 'access':'ready', 'tags':[x for x in fields[2:] if x], 'activity':'Unknown'})
-    # List running-unit names only; no environment/ExecStart or journal reads.
+def cover(provider, location, operation):
+    previous = set(reasons)
+    operation()
+    issues = sorted(reasons - previous)
+    state = 'denied' if any('permission denied' in issue for issue in issues) else 'partial' if issues else 'complete'
+    send({'coverage': {'provider': provider, 'location': location, 'state': state, 'detail': '; '.join(issues)}})
+
+def containers():
+    global candidates
+    fmt = '{{.ID}}\t{{.Names}}\t{{.Label "com.docker.compose.project"}}\t{{.Label "com.docker.compose.service"}}'
+    for line in command(['docker','ps','--last','500','--filter','status=running','--no-trunc','--format',fmt]).decode('utf-8','replace').splitlines()[:500]:
+        fields = line.split('\t')
+        if len(fields) != 4 or not re.fullmatch('[a-fA-F0-9]{64}',fields[0]): continue
+        if candidates >= 500: reasons.add('candidate cap'); break
+        candidates += 1
+        send({'file_type':'container','confidence':'metadata','identity':fields[0],'path':fields[1], 'provider':'docker', 'provenance':'Docker running-container metadata', 'container_id':fields[0], 'access':'ready', 'tags':[x for x in fields[2:] if x], 'activity':'Unknown'})
+
+def units():
     for line in command(['systemctl','list-units','--type=service','--state=running','--no-legend','--no-pager','--plain'], 64*1024).decode('utf-8','replace').splitlines()[:200]:
         unit = line.split()[0] if line.split() else ''
         if unit: send({'unit_hint':unit})
@@ -191,8 +202,20 @@ else:
                 value = line.split('=',1)[1]
                 for prefix in ('file:','append:','truncate:'):
                     if value.startswith(prefix): configured(value[len(prefix):], 'systemd')
-                # Journal content is only read after explicit Start.
+
+if p.get('complete'):
+    scan(p['parent'], 0, 'completion', p['prefix'])
+else:
+    if p.get('docker'):
+        if shutil.which('docker'): cover('docker', 'Running containers', containers)
+        else: send({'coverage': {'provider':'docker','location':'Running containers','state':'unavailable','detail':'Docker is not available in the SSH environment'}})
+    if p.get('journal') or p.get('selected_units'):
+        if platform.system() == 'Linux' and shutil.which('systemctl'):
+            cover('journal', 'Running services', units)
+        else: send({'coverage': {'provider':'journal','location':'Running services','state':'unsupported','detail':'systemd is not supported on this host'}})
     for pid in p.get('selected_pids', [])[:32]:
+        if platform.system() != 'Linux':
+            send({'coverage': {'provider':'process_fd','location':str(pid),'state':'unsupported','detail':'Process FD discovery requires Linux proc metadata'}}); continue
         try:
             with os.scandir('/proc/'+str(pid)+'/fd') as it:
                 for n in range(64):
@@ -205,12 +228,19 @@ else:
                         if target.endswith(('.log','.out','.err')) and stat.S_ISREG(os.stat(fd.path).st_mode): candidate(target,'process_fd','selected PID '+str(pid)+' open descriptor')
                     except OSError: pass
         except OSError: reasons.add('PID FD metadata unavailable')
-    if p.get('var_log'): scan('/var/log', 1, 'var_log')
+    if p.get('var_log'):
+        root = os.path.realpath('/var/log')
+        cover('var_log', root, lambda: scan(root,1,'var_log'))
+    for root in p.get('directories', []):
+        cover('directory', root, lambda root=root: scan(root,1,'directory'))
     for root in p.get('project_roots', []):
-        for suffix in ('logs','log','storage/logs','tmp/logs'): scan(os.path.join(root,suffix),1,'project')
-    if p.get('pm2_root'): scan(p['pm2_root'],0,'pm2_directory')
+        # Backwards-compatible presets are optional hints, not proof of a framework.
+        for suffix in ('', 'logs','log','storage/logs','tmp/logs'):
+            location = os.path.join(root,suffix) if suffix else root
+            if os.path.isdir(location): cover('project', location, lambda location=location: scan(location,1,'project'))
+    if p.get('pm2_root'): cover('pm2_directory', p['pm2_root'], lambda: scan(p['pm2_root'],0,'pm2_directory'))
     if p.get('config_consent'):
-        for file in p.get('config_files', [])[:32]: config(file)
+        for file in p.get('config_files', [])[:32]: cover('config', file, lambda file=file: config(file))
 if observations and not p.get('complete') and time.monotonic()-started < 12:
     time.sleep(1)
     for path, (device,inode,size,observed) in observations.items():

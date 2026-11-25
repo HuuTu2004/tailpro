@@ -1,72 +1,59 @@
-<p align="center">
-  <img src="docs/assets/tailpro-banner.svg" alt="TailPro — your servers, your logs, one workspace." width="100%" />
-</p>
+<p align="center"><img src="docs/assets/tailpro-banner.svg" alt="TailPro — your servers, your logs, one workspace." width="100%" /></p>
 
-<p align="center">
-  <strong>A local-first desktop log explorer for developers who debug over SSH.</strong>
-</p>
+TailPro is a local desktop workspace for exploring remote logs over SSH. Built with Rust, Tauri and React. [Tiếng Việt](README.vi.md).
 
-<p align="center">
-  <a href="#why-tailpro">Why TailPro</a> ·
-  <a href="#what-you-can-explore">Features</a> ·
-  <a href="#run-from-source">Run from source</a> ·
-  <a href="CONTRIBUTING.md">Contribute</a> ·
-  <a href="README.vi.md">Tiếng Việt</a>
-</p>
+[Download releases](https://github.com/HuuTu2004/tailpro/releases) · [Build status](https://github.com/HuuTu2004/tailpro/actions) · [Validation evidence](docs/process/current-status.md)
 
-> **Development preview.** TailPro is under active development, with Linux as the initial target. Runtime validation is ongoing. Packaged AppImage/deb releases and release certification are still ahead. See the [current status](docs/process/current-status.md) for verified behavior and open validation work.
+Version 0.1.0 is a development preview. Native packages are built on each target OS; signing and runtime coverage are described below.
 
-## Why TailPro
+## Features
 
-Debugging a service often starts with several SSH sessions, a few `tail -f` commands, and logs scattered across files and containers. TailPro brings those sources into one desktop workspace so you can search, inspect, and share the context you need.
+- Saved SSH connections, config aliases, private-key selection, optional jump hosts, strict host-key verification and per-session dynamic-config consent.
+- An **Open logs** window with **Found sources**, **Browse folders** and **Enter path**. Select several sources, see access/scan coverage, then open them.
+- Remembered source choices and scan locations. Optionally restore previous readers after you explicitly reconnect; credentials and log contents are not saved in settings.
+- File, Docker and systemd Journal readers with source health, pause/resume, source tabs and combined views. Maximum three hosts and eight readers per workspace.
+- Three viewer controls: **Columns**, **Time** (date/time range) and **Status** (log level). Search, event details and redacted CSV/NDJSON export use the same backend query.
+- Optional scoped MCP evidence tools and optional local Ollama / HTTPS BYOK explanations. Sharing requires grants or approval in the app.
 
-It connects through **OpenSSH** and does not install a TailPro agent on your servers. Reading remote files requires Python 3 on the host; Docker sources require the Docker CLI and permission to read container logs.
+Discovery reads bounded metadata in the displayed locations. Add directories to expand the scope; it does not promise to find every log on a server. Compressed archives are shown as unsupported. Retained logs are held in memory, with visible retention/continuity gaps.
 
-## What you can explore
+## Install
 
-| Workflow | What TailPro provides |
-| --- | --- |
-| Connect to a host | SSH config aliases, existing SSH identities/agents, trusted host-key checks, and connection reuse. |
-| Open log files | Add absolute file paths under a host, open them with double-click/Enter, and reuse pinned paths. |
-| Follow several sources | A combined log viewer, source health, pause/resume, and visible continuity or retention gaps. |
-| Investigate an event | Filters, Saved Views, and a JSON/raw Inspector with surrounding context. |
-| Share an incident | Preview redacted NDJSON or spreadsheet-safe CSV before exporting. |
-| Give a coding client context | A scoped MCP bridge with explicit source grants and eight scoped evidence tools (schema 2). |
-| Explore an explanation | Optional error explanations through local Ollama or a configured OpenAI-compatible BYOK endpoint. |
+| System | Download | Prerequisites |
+| --- | --- | --- |
+| Windows x64 | NSIS setup `.exe` | Windows 10/11, WebView2 and Windows OpenSSH Client |
+| macOS Apple Silicon | `aarch64.dmg` | macOS 12+ and system OpenSSH |
+| macOS Intel | `x64.dmg` | macOS 12+ and system OpenSSH |
+| Linux x64 | `.deb` or `.AppImage` | Ubuntu 24.04 or compatible GTK 3 / WebKitGTK 4.1 desktop; OpenSSH; AppImage may require FUSE 2 |
 
-These workflows have implementation and local validation evidence, with remaining integration work documented in the [status report](docs/process/current-status.md). Model inference and provider compatibility still need runtime validation. Backend microservice capabilities include Journal, error clusters, service/code hints, trace events/durations and opt-in static topology; Sources, Trace, Topology and the Ctrl+K palette have been removed from the desktop UI; its runtime gates and Linux release hardening are tracked in the [roadmap](docs/plan/roadmap.md).
+Install the package for your CPU architecture. MCP adapters are separate platform ZIP files on the same release; extract one and use the absolute path to `tailpro-mcp` in the enrollment configuration shown by Settings.
 
-## A typical session
+Packages are not signed with a paid Apple Developer or Windows signing certificate. macOS packages use ad-hoc signing and are not notarized; Gatekeeper may block opening. Verify the release checksums and use your OS's explicit approval flow for downloaded apps you trust. Windows may display SmartScreen. There is no automatic updater.
 
-1. **Connect**: click Connections or + beside HOSTS, enter SSH details, and press Connect. Saved profiles can be selected in the same form; Test connection is optional.
-2. **Add a log** using the + next to a host, enter its absolute file path in the separate Add log window, and press Add.
-3. **Start** the sources you want to follow.
-4. **Filter and inspect** events; pause the viewport when you need to read.
-5. **Export** a previewed, redacted incident or grant a compatible MCP client access to selected sources.
+**Windows authentication:** readers use separate Windows OpenSSH processes because the system client does not support ControlMaster. Use key/SSH-agent authentication; add encrypted keys to the Windows OpenSSH agent before connecting. Password/keyboard-interactive sessions currently require macOS or Linux. This restriction is surfaced as an actionable connection error.
 
-Saved server profiles reappear in HOSTS after restarting the app. Click Connect to reuse the saved host, user, port, agent and environment; remembered log paths appear after connecting. Double-click a log to start reading. See the [macOS Spring Boot acceptance](docs/process/macos-spring-production-acceptance.md) for live Tailscale validation.
+**Remote servers:** Linux or macOS with a POSIX shell and Python 3. Docker requires a reachable Docker daemon and CLI permissions. Journal requires Linux/systemd and readable Journal access. Remote Windows log readers are not supported. Tailscale works through normal SSH reachability; TailPro does not manage the VPN.
 
-Discovery and streaming are separate actions. Pinning a path does not automatically start reading it.
+## Start reading logs
+
+1. Open **Connections**, enter a host or SSH alias, choose authentication, then **Connect**. Verify any new host fingerprint against a trusted source. No automatic trust bypass.
+2. On the first connection, **Open logs** appears. Choose found sources, browse folders, or enter an absolute file path. Click **Open selected**.
+3. Use Columns, Time and Status to inspect events. Source health and scan coverage show incomplete access or gaps.
+4. Reopen remembered logs from the host tree. After restarting TailPro, click a saved host to reconnect. Enable **Restore previous readers after I reconnect** in the picker if desired.
+5. Preview redacted exports or create an explicit MCP grant in Settings.
+
+The + beside a host opens the log picker. Saved profiles can be edited through the Connections form. Settings and source history are local; disconnecting does not forget the server.
 
 | Shortcut | Action |
 | --- | --- |
-| `Ctrl+K` | Open the command palette |
-| `Ctrl+F` | Focus the query field |
-| `Space` in the log table | Pause or resume |
-| `Enter` on a row | Open the Inspector |
-| `Escape` | Close the active panel |
+| Ctrl+F / Cmd+F | Focus search |
+| Space in the log table | Pause / resume |
+| Enter on a row | Open details |
+| Escape | Close the active popup or editor |
 
 ## Run from source
 
-### Prerequisites
-
-- A Linux desktop with the [Tauri system dependencies](https://v2.tauri.app/start/prerequisites/), including GTK 3 and WebKitGTK 4.1.
-- Rust stable with Rust 2024 edition support.
-- Node.js 20.19+ or 22.12+ and npm, matching the Vite 7 toolchain.
-- OpenSSH on your machine and a reachable SSH host with an already trusted host key.
-- Python 3 on hosts used for file reading/discovery; Docker CLI access for Docker sources.
-
-From the project directory:
+Install [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) for your OS, Rust stable (1.89+), Node.js 22.12+ and npm. Then:
 
 ```bash
 npm ci
@@ -74,60 +61,21 @@ npm run contracts
 npm run tauri dev
 ```
 
-To build a development binary with bundled frontend assets:
+`npm run dev` serves only frontend assets; the native backend is required. There is no mock backend or bundled production data.
+
+Build native packages on the target OS:
 
 ```bash
-npm run build
-cargo build -p tailpro-desktop --features custom-protocol --locked
+npm run tauri build -- --locked
+cargo build -p tailpro-mcp --release --locked
 ```
 
-The UI uses native Tauri IPC. Start it with `npm run tauri dev`; `npm run dev` alone serves frontend assets and does not supply a backend or sample data.
+Bundles are in `target/release/bundle/`. The [release workflow](.github/workflows/release.yml) builds Windows x64, Linux x64, macOS ARM64 and macOS x64, then publishes a tagged release only after every build succeeds. Release assets include SHA-256 checksums.
 
-This produces a development binary, not a packaged release. The Rust core libraries can be built without a WebView; see [CONTRIBUTING.md](CONTRIBUTING.md) for scoped checks.
+## Development and validation
 
-## Your data and your tools
+See [CONTRIBUTING.md](CONTRIBUTING.md), [architecture](docs/system-design/architecture.md), [connection/source design](docs/system-design/connection-and-source-picker.md) and [current status](docs/process/current-status.md). Rust DTOs generate the TypeScript contract. Dependencies follow desktop → app-core → log-core; the small platform crate owns private local storage permissions.
 
-- **Local-first storage.** Settings are stored locally; retained logs and checkpoints are currently held in RAM.
-- **Existing SSH trust.** TailPro uses trusted host keys and existing SSH identities. Dynamic SSH configuration requires session consent.
-- **Explicit sharing.** Exports and external tool/model access use redaction, previews or grants as applicable. Review the material you share, especially real incident logs.
-- **Optional model access.** Explain Error is disabled by default. You choose a local Ollama endpoint or an HTTPS BYOK endpoint and approve the prepared request. There is no TailPro model proxy or automatic cloud fallback.
+Checks use scoped builds, Clippy, typecheck and manual acceptance, following the repository policy. Building a package does not certify all runtime scenarios. Live Linux-client → macOS-server Spring Boot reading over Tailscale has acceptance evidence; Windows/macOS desktop runtime coverage and sustained-load/other historical gates remain tracked in the status report.
 
-See the [design contracts](docs/system-design/contracts.md) and [validation evidence](docs/process/current-status.md) for the intended boundaries and their current validation status.
-
-## MCP: log evidence for coding tools
-
-Build the adapter:
-
-```bash
-cargo build -p tailpro-mcp
-```
-
-Start a source in the desktop app, open **AI & MCP settings**, select the sources and client, and confirm the grant. Use the enrollment configuration shown by the app, replacing its command with the absolute path to your `tailpro-mcp` binary. Keep enrollment tokens private.
-
-The current tools are `list_sources`, `get_recent_logs`, `search_logs`, `get_log_context`, `locate_service`, `get_error_clusters`, `trace_id`, and `inspect_context`. They expose scoped, redacted log evidence; the coding client owns model access, edits, builds, and commands. Session grants expire and must be renewed after a restart or source configuration change.
-
-The [MCP and AI acceptance notes](docs/process/phase-03-acceptance.md) cover onboarding, observation cursors, limits, and remaining client/provider checks. Detailed operational notes are also available in the [Vietnamese README](README.vi.md#ai--mcp-và-incident-output-phase-3).
-
-Journal requires Python 3, journalctl and permission to read the selected unit. Service mappings declare checkout hints without opening repositories. Trace and Topology panels were removed from the desktop UI on 25 November 2026; the underlying backend APIs remain. Backend topology requires separate exact-file/root consent and supports a static Compose subset; unresolved imports/variables and missing log coverage remain visible. See [Phase 4 acceptance](docs/process/phase-04-acceptance.md) for limits and remaining runtime checks.
-
-## Help shape TailPro
-
-Useful contributions include clearer setup instructions, reproducible source/SSH issues, Linux compatibility reports, and concrete debugging workflows. Please read [CONTRIBUTING.md](CONTRIBUTING.md) before starting a code change.
-
-For early feedback and questions, [join the conversation with Tu Nguyen](https://github.com/HuuTu2004/HuuTu2004/discussions). English and Vietnamese are welcome. Share synthetic or redacted logs.
-
-## Project map
-
-| Read this | To understand |
-| --- | --- |
-| [Current status](docs/process/current-status.md) | What has been checked and what remains open |
-| [Architecture](docs/system-design/architecture.md) | Code structure, ownership, and resource budgets |
-| [Design contracts](docs/system-design/contracts.md) | Expected behavior and security boundaries |
-| [Roadmap](docs/plan/roadmap.md) | The five development phases and their acceptance gates |
-| [Build guide](docs/plan/build-performance.md) | Scoped compilation and build measurements |
-| [Contributor guide](CONTRIBUTING.md) | Setup, change scope, and validation |
-| [Agent instructions](AGENTS.md) | Repository conventions for coding agents |
-
-Most engineering notes are currently in Vietnamese. English documentation improvements are welcome.
-
-Built with **Rust · Tauri · React · TypeScript · OpenSSH** by [Tu Nguyen](https://github.com/HuuTu2004).
+MIT license. IBM Plex fonts retain their bundled license in `src/shared/ui/fonts/`.

@@ -2,7 +2,7 @@ import { Icon } from '../../shared/ui/Icon';
 import { Button } from '../../shared/ui/Controls';
 import { useEffect, useRef, useState } from 'react';
 import { listen } from '@tauri-apps/api/event';
-import type { AddLogPathRequest, ConnectionInfo, HostProfile, SourceInfo } from '../../shared/contracts/generated';
+import type { AddLogPathRequest, ConnectionInfo, HostProfile, SourceSpec, SourceInfo } from '../../shared/contracts/generated';
 import { native } from '../../shared/client/native';
 import { sourceKey, sourceLabel, sourcePath, type LogSource } from './source-labels';
 import './host-log-tree.css';
@@ -22,13 +22,12 @@ type Props = {
 const HISTORY_LIMIT = 128;
 export function HostLogTree({ connections, sources, selectedHost, scope, opening, closing, selectHost, open, connect, manageConnections }: Props) {
   const [known, setKnown] = useState<Map<string, LogSource>>(new Map());
-  const [pins, setPins] = useState<Record<string, string[]>>({});
+  const [pins, setPins] = useState<Record<string, SourceSpec[]>>({});
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [focused, setFocused] = useState('');
   const [filter, setFilter] = useState('');
   const [editorReady, setEditorReady] = useState(false);
   const [pathError, setPathError] = useState('');
-  const [connecting, setConnecting] = useState<Set<string>>(new Set());
   const connectingRef = useRef(new Set<string>());
   const addRequestedPath = useRef<(hostId: string, path: string) => string | null>(() => 'The host navigator is not ready.');
   const rememberAfterRead = useRef(new Set<string>());
@@ -56,10 +55,10 @@ export function HostLogTree({ connections, sources, selectedHost, scope, opening
     const connected = connections.filter(host => host.state === 'connected');
     // Serial metadata reads keep many expanded hosts from starting a request burst.
     void (async () => {
-      const paths: Record<string, string[]> = {};
+      const paths: Record<string, SourceSpec[]> = {};
       for (const host of connected) {
         if (!alive) return;
-        try { paths[host.host.id] = (await native.pins(host.host.id)).slice(0, 100); }
+        try { paths[host.host.id] = (await native.rememberedSources(host.host.id)).slice(0, 100); }
         catch { /* Already known logs remain usable if saved paths are unavailable. */ }
       }
       if (alive) setPins(paths);
@@ -70,7 +69,7 @@ export function HostLogTree({ connections, sources, selectedHost, scope, opening
 
   const entries = new Map(known);
   for (const [hostId, paths] of Object.entries(pins)) for (const value of paths) {
-    const entry: LogSource = { hostId, spec: { kind: 'file', path: value } };
+    const entry: LogSource = { hostId, spec: value };
     entries.set(sourceKey(entry), entry);
   }
   for (const source of sources) {
@@ -87,7 +86,7 @@ export function HostLogTree({ connections, sources, selectedHost, scope, opening
       const value = source.spec.path;
       // Existing native policy pins only a file that has actually started successfully.
       void native.pin(source.host_id, value).then(() => {
-        if (alive) setPins(previous => ({ ...previous, [source.host_id]: [...new Set([...(previous[source.host_id] ?? []), value])].slice(-100) }));
+        if (alive) setPins(previous => ({ ...previous, [source.host_id]: [...new Set([...(previous[source.host_id] ?? []), { kind: 'file' as const, path: value }])].slice(-100) }));
       }).catch(() => { /* Keep the session entry even if it cannot be remembered on disk. */ });
     }
     return () => { alive = false; };
@@ -95,9 +94,9 @@ export function HostLogTree({ connections, sources, selectedHost, scope, opening
   const needle = filter.trim().toLowerCase();
   async function reconnect(host: HostProfile) {
     if (connectingRef.current.has(host.id)) return;
-    connectingRef.current.add(host.id); setConnecting(new Set(connectingRef.current)); selectHost(host.id);
+    connectingRef.current.add(host.id); selectHost(host.id);
     try { await connect(host); }
-    finally { connectingRef.current.delete(host.id); setConnecting(new Set(connectingRef.current)); }
+    finally { connectingRef.current.delete(host.id); }
   }
   async function startAdding(hostId: string) {
     selectHost(hostId); setExpanded(previous => new Set([...previous, hostId])); setPathError('');
@@ -138,10 +137,10 @@ export function HostLogTree({ connections, sources, selectedHost, scope, opening
         const isExpanded = expanded.has(host.id) || Boolean(needle);
         return <div className="log-tree-host" key={host.id}>
           <div className={'log-tree-host-heading' + (selectedHost === host.id ? ' selected' : '')}>
-            <Button className="log-tree-host-toggle" aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${host.target} logs`} aria-expanded={isExpanded} title={`${host.target} · ${host.environment} · ${hostEntries.length} known logs`} onClick={() => { selectHost(host.id); setExpanded(previous => { const next = new Set(previous); if (isExpanded) next.delete(host.id); else next.add(host.id); return next; }); }}><span className="tree-chevron" aria-hidden="true"><Icon name={isExpanded ? 'chevron-down' : 'chevron-right'}/></span><span className={'dot ' + connection.state}/><strong>{host.target}</strong>{host.environment === 'production' && <span className="tree-prod" aria-label="Production" title="Production">●</span>}<span className="tree-log-count">{hostEntries.length}</span></Button>
-            <Button className="log-tree-add" aria-label={`Add log to ${host.target}`} title={connection.state === 'connected' ? 'Add a log path' : 'Connect this host to add a log'} disabled={!editorReady || connection.state !== 'connected'} onClick={() => startAdding(host.id)}>+</Button>
+            <Button className="log-tree-host-toggle" aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${host.target} logs`} aria-expanded={isExpanded} title={`${host.target} · ${host.environment} · ${hostEntries.length} known logs`} onClick={() => { selectHost(host.id); if (connection.state === 'disconnected' || connection.state === 'needs_action') void reconnect(host); setExpanded(previous => { const next = new Set(previous); if (isExpanded) next.delete(host.id); else next.add(host.id); return next; }); }}><span className="tree-chevron" aria-hidden="true"><Icon name={isExpanded ? 'chevron-down' : 'chevron-right'}/></span><span className={'dot ' + connection.state}/><strong>{host.target}</strong>{host.environment === 'production' && <span className="tree-prod" aria-label="Production" title="Production">●</span>}<span className="tree-log-count">{hostEntries.length}</span></Button>
+            <Button className="log-tree-add" aria-label={`Open logs on ${host.target}`} title={connection.state === 'connected' ? 'Open logs' : 'Connect this host to add a log'} disabled={!editorReady || connection.state !== 'connected'} onClick={() => startAdding(host.id)}>+</Button>
           </div>
-          {connection.state !== 'connected' && <div className="log-tree-connection"><span title={connection.detail ?? `${host.user ? `${host.user}@` : ''}${host.target}:${host.port ?? 22}`}>{connection.state === 'disconnected' ? 'Saved · Disconnected' : connection.state.replaceAll('_', ' ')}</span>{(connection.state === 'disconnected' || connection.state === 'needs_action') && <Button className="log-tree-connect" aria-label={`Connect to ${host.target}`} disabled={connecting.has(host.id)} onClick={() => void reconnect(host)}>{connecting.has(host.id) ? 'Connecting…' : 'Connect'}</Button>}</div>}
+          {connection.state !== 'connected' && <div className="log-tree-connection"><span title={connection.detail ?? `${host.user ? `${host.user}@` : ''}${host.target}:${host.port ?? 22}`}>{connection.state === 'disconnected' ? 'Saved · Disconnected' : connection.state.replaceAll('_', ' ')}</span></div>}
           {isExpanded && <div className="log-tree-children" role="group" aria-label={`${host.target} logs`}>
             {visible.map(([key, entry]) => {
               const reading = active.get(key);

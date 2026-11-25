@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/log-core", "crates/app-core", "crates/app-protocol", "crates/mcp-adapter", "src-tauri"]
+members = ["crates/platform", "crates/log-core", "crates/app-core", "crates/app-protocol", "crates/mcp-adapter", "src-tauri"]
 default-members = ["crates/log-core", "crates/app-core"]
 resolver = "2"
 

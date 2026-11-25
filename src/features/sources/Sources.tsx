@@ -52,7 +52,7 @@ export function Sources({ host, sources, requestedPath, run }: Props) {
     setBusy(true);
     const revision = ++discoveryVersion.current;
     try {
-      const found = await native.discover({ host_id: host.host.id, project_roots: root ? [root] : [], docker, var_log: varLog, pm2_root: pm2 || null, selected_pids: pids.split(',').filter(Boolean).map(Number), selected_units: units.split(',').map(x => x.trim()).filter(Boolean), config_consent: consent, config_files: consent ? configs.split('\n').filter(Boolean) : [], config_roots: consent && configRoot ? [configRoot] : [] });
+      const found = await native.discover({ directories: [], journal: true, host_id: host.host.id, project_roots: root ? [root] : [], docker, var_log: varLog, pm2_root: pm2 || null, selected_pids: pids.split(',').filter(Boolean).map(Number), selected_units: units.split(',').map(x => x.trim()).filter(Boolean), config_consent: consent, config_files: consent ? configs.split('\n').filter(Boolean) : [], config_roots: consent && configRoot ? [configRoot] : [] });
       if (revision === discoveryVersion.current) setResult(found);
     } finally { if (revision === discoveryVersion.current) setBusy(false); }
   }

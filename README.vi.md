@@ -1,12 +1,39 @@
-[English](README.md) · **Tiếng Việt**
-
 # TailPro
 
-Ứng dụng local-first đọc log qua SSH, không cài agent lên VPS. Đã có Tauri/React shell, hai Rust core library, SSH multiplexing, Docker/file readers/discovery và viewer phase 2: bảng đa nguồn, query/Saved Views, JSON/raw Inspector, pause và phím tắt; phase 3 thêm redaction/export, MCP/grants/observation và optional Explain Error; phase 4 thêm Journal, clusters/service/code hints, trace và static topology. Tiến độ và các gate chưa đạt ở [process/current-status.md](docs/process/current-status.md).
+Ứng dụng desktop đọc và kiểm tra log trên server qua SSH, viết bằng Rust, Tauri và React. [English](README.md).
 
-## Chạy development
+[Tải bản phát hành](https://github.com/HuuTu2004/tailpro/releases) · [Trạng thái build](https://github.com/HuuTu2004/tailpro/actions) · [Bằng chứng nghiệm thu](docs/process/current-status.md)
 
-Cần Rust stable, Node/npm, OpenSSH và GUI Linux. Desktop cần GTK 3/WebKitGTK 4.1 cùng dependencies trong [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/). Core libraries build được khi không có WebView. File/discovery yêu cầu Python 3 trên host; Docker source yêu cầu Docker CLI và quyền đọc container logs.
+Bản 0.1.0 là development preview. Mỗi gói được build trên hệ điều hành đích; các trường hợp chưa nghiệm thu được ghi rõ trong tài liệu trạng thái.
+
+## Cài đặt
+
+| Máy dùng ứng dụng | Gói tải | Yêu cầu |
+| --- | --- | --- |
+| Windows x64 | Setup `.exe` | Windows 10/11, WebView2, Windows OpenSSH Client |
+| Mac Apple Silicon | `aarch64.dmg` | macOS 12 trở lên |
+| Mac Intel | `x64.dmg` | macOS 12 trở lên |
+| Linux x64 | `.deb` / `.AppImage` | Ubuntu 24.04 hoặc desktop tương thích GTK 3, WebKitGTK 4.1, OpenSSH; AppImage có thể cần FUSE 2 |
+
+Gói chưa có chứng thư ký Apple Developer/Windows. Mac dùng ad-hoc signing, chưa notarize nên Gatekeeper có thể chặn mở; Windows có thể hiện SmartScreen. Kiểm tra SHA256SUMS.txt và dùng thao tác cho phép rõ ràng của hệ điều hành nếu bạn tin nguồn tải. Chưa có tự cập nhật.
+
+Server đích cần Linux/macOS, POSIX shell và Python 3. Docker cần CLI, daemon và quyền đọc log. Journal cần Linux/systemd và quyền truy cập. Chưa hỗ trợ đọc log server Windows. Tailscale chỉ cung cấp đường mạng SSH, ứng dụng không quản lý VPN.
+
+**Trên Windows:** dùng SSH key hoặc Windows OpenSSH agent. Nạp key có passphrase vào agent trước khi kết nối. Windows OpenSSH chưa hỗ trợ ControlMaster, nên các reader dùng tiến trình SSH riêng. Password/keyboard-interactive hiện dùng trên client Linux/macOS; ứng dụng báo rõ nếu chọn phương thức này trên Windows.
+
+## Sử dụng
+
+1. Mở Connections, nhập host hoặc SSH alias, user và phương thức xác thực rồi Connect. Host mới cần xác minh fingerprint với nguồn tin cậy.
+2. Lần đầu kết nối sẽ mở **Open logs**: chọn **Found sources**, **Browse folders** hoặc **Enter path**. Có thể chọn nhiều nguồn rồi **Open selected**.
+3. Viewer có đúng ba tùy chọn **Columns**, **Time** và **Status**. Time chọn ngày/giờ; Status lọc mức log. Search, paging và export dùng cùng query backend.
+4. Server, đường dẫn nguồn và phạm vi quét được nhớ lại. Bấm host đã lưu để kết nối lại; bật **Restore previous readers after I reconnect** nếu muốn khôi phục reader. Password, OTP và nội dung private key không lưu trong settings.
+5. Dùng Settings để cấp quyền MCP hoặc cấu hình Explain Error khi cần. Export có bước xem trước dữ liệu đã redaction.
+
+Nút + cạnh host mở bộ chọn log. Quét chỉ đọc metadata có giới hạn tại các vị trí hiển thị; thêm folder để mở rộng phạm vi. Không cam kết tự tìm toàn bộ log trên filesystem. File nén hiển thị không được hỗ trợ. App giữ log trong RAM, hiển thị giới hạn lưu giữ và khoảng trống continuity. Tối đa 3 host và 8 reader.
+
+## Build từ source
+
+Cài [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) cho hệ điều hành đang dùng, Rust stable 1.89+, Node.js 22.12+ và npm:
 
 ```bash
 npm ci
@@ -14,67 +41,19 @@ npm run contracts
 npm run tauri dev
 ```
 
-Để build binary chứa frontend assets:
+Build gói cài đặt trên đúng hệ điều hành:
 
 ```bash
-npm run build
-cargo build -p tailpro-desktop --features custom-protocol --locked
+npm run tauri build -- --locked
+cargo build -p tailpro-mcp --release --locked
 ```
 
-Giao diện gọi native Tauri IPC trực tiếp. Chạy `npm run tauri dev`; `npm run dev` riêng chỉ phục vụ frontend, không có backend giả hoặc dữ liệu demo.
+Gói nằm trong `target/release/bundle/`. Workflow build Windows x64, Linux x64, Mac ARM64 và Mac Intel; chỉ publish release có tag sau khi tất cả build thành công. Adapter MCP được phát hành riêng theo từng nền tảng; dùng đường dẫn tuyệt đối tới executable trong cấu hình enrollment ở Settings. Không chia sẻ token enrollment.
 
-Ứng dụng chỉ dùng host key đã được tin cậy trong OpenSSH. Import alias không chạy `ssh -G` hay Match exec. Config dynamic cần consent riêng cho session; không có arbitrary command input. SSH agent/IdentityAgent hiện có được dùng trực tiếp, không tạo daemon key manager.
+Phím tắt: Ctrl/Cmd+F tìm kiếm; Space ở bảng để pause/resume; Enter mở chi tiết; Escape đóng popup/editor.
 
-Connect host → mở cây HOSTS bên trái → bấm + cạnh host → nhập đường dẫn trong cửa sổ Add log path riêng → Add → double-click log hoặc Enter để bắt đầu đọc và mở tab. × trên tab dừng reader; chuyển qua tab khác vẫn giữ reader đang chạy. Combine sources cho chọn các log đang mở để xem chung. Đóng hết tab thì viewer ngừng query và hiện hướng dẫn mở log. File mới chỉ được pin sau khi mở thành công; thêm mục vào cây chưa cấp quyền đọc. Production là nhãn do user gắn, không thay quyền truy cập. Live viewer đọc từng page ≤200 rows/512 KiB; cache tối đa 2000 rows. Ctrl+F focus query; Space ở bảng pause/resume, Enter mở Inspector, Escape đóng panel. Bảng log và Event details chung một khung: chọn dòng rồi bấm Details hoặc Enter để mở; kéo divider chỉnh độ rộng, dùng scrollbar ngang ở đáy bảng cho dòng dài.
+## Tài liệu và giới hạn nghiệm thu
 
-Bấm Connections hoặc + cạnh HOSTS mở thẳng form kết nối trong cửa sổ hệ điều hành riêng → nhập SSH alias/host → Connect. Không cần vào danh sách rồi Add hoặc Save trước. Test connection là tùy chọn, dùng phiên tạm và không lưu/thay đổi phiên đang chạy. Server đã lưu hiện lại trong HOSTS sau restart với nút Connect; dùng lại host/user/port/agent/environment, không cần nhập lại. Các đường dẫn log đã pin xuất hiện sau khi kết nối; double-click mới đọc log. Kết nối đã lưu có thể được chọn ngay trong form; chọn profile chưa tự Connect. Connect dùng API hiện có để lưu profile và bắt đầu kết nối; trạng thái SSH hiện trong cây HOSTS, không tự Start log. Tab log một dòng nằm sát trên cùng; Connections và Settings nằm ở cuối sidebar. Đã bỏ menu ⋯, tìm nhanh Ctrl+K và các panel Sources/Trace/Topology. Thêm absolute log path bằng + cạnh host, rồi double-click hoặc Enter để đọc; Ctrl+F focus bộ lọc log. Settings mở cửa sổ cài đặt riêng.
+Xem [CONTRIBUTING](CONTRIBUTING.md), [thiết kế kết nối/chọn nguồn](docs/system-design/connection-and-source-picker.md), [kiến trúc](docs/system-design/architecture.md) và [trạng thái thực tế](docs/process/current-status.md). Đã có bằng chứng đọc log Java/Spring Boot trên Mac qua Tailscale từ client Linux. Build package không thay thế nghiệm thu runtime Windows/Mac desktop hoặc các gate tải lớn còn mở.
 
-Settings lưu cục bộ, versioned/atomic, tối đa 1 MiB. Log retention và checkpoints ở RAM. SSH disconnect tự reconnect có giới hạn; Stop/Disconnect do user hủy retry. File rotation/truncate và continuity ambiguity có marker/quality. Replay Docker không hard-suppress nội dung trùng.
-
-## Development checks
-
-```bash
-cargo fmt --all --check
-cargo check -p log-core --lib
-cargo check -p app-core --lib
-cargo clippy -p log-core -p app-core --lib -- -D warnings
-npm run typecheck
-npm run build
-```
-
-Theo quy định repo, không viết automated tests. Kết quả kiểm chứng lịch sử ở [acceptance phase 1](docs/process/phase-01-acceptance.md) [acceptance phase 2](docs/process/phase-02-acceptance.md) và [acceptance phase 3](docs/process/phase-03-acceptance.md). Không dùng số đo local làm cam kết VPS/network hoặc compatibility Ubuntu 24.04.
-
-## Tài liệu
-
-| Cần biết | Tài liệu |
-| --- | --- |
-| Tiến độ, blockers, next action | [Process](docs/process/current-status.md) |
-| Map code, ownership, budgets | [Architecture](docs/system-design/architecture.md) |
-| Hành vi và bảo mật bắt buộc | [Contracts](docs/system-design/contracts.md) |
-| Thứ tự, gate và performance targets | [Roadmap](docs/plan/roadmap.md) |
-| Compile scoped và measurements | [Build performance](docs/plan/build-performance.md) |
-| Quy tắc contributor/AI | [AGENTS.md](AGENTS.md) |
-
-## Lộ trình
-
-1. [Core, SSH và nguồn log](docs/plan/phase-01-core-ssh-sources.md)
-2. [Trải nghiệm log viewer](docs/plan/phase-02-viewer-experience.md)
-3. [AI-native, MCP và output an toàn](docs/plan/phase-03-ai-mcp-security.md)
-4. [Microservice và production debugging](docs/plan/phase-04-production-debugging.md)
-5. [Tối ưu và phát hành Linux](docs/plan/phase-05-hardening-linux-release.md)
-
-## AI / MCP và incident output (Phase 3)
-
-`cargo build -p tailpro-mcp` tạo `target/debug/tailpro-mcp`. Mở desktop, Start nguồn, vào **AI & MCP settings**, chọn đúng sources/client và xác nhận external client/model có thể nhận redacted logs. Dùng enrollment config được hiển thị một lần, thay command bằng absolute path đến binary; token không đưa vào issue/commit. Grant chỉ trong app session, TTL một giờ; restart/source configuration change yêu cầu cấp lại. Không sửa global client config tự động.
-
-Tám tools/schema 2: `list_sources`, `get_recent_logs`, `search_logs`, `get_log_context`, `locate_service`, `get_error_clusters`, `trace_id`, `inspect_context`. Coding client tự edit/build; capture `get_recent_logs(limit=0, query, sources)` trước reproduce, rồi đọc `search_logs` với observation cursor và cùng query/scope. Tiếp tục `next_cursor` tới hết fence; evidence ref dùng để mở bounded preceding context. Cursor/page/ref có TTL, không pin retention. Gaps hoặc không thấy expected request là chưa đủ evidence của fix/deployment.
-
-**Export incident** trong viewer dùng scope/query hiện tại; Inspector có export/Explain cho event đang chọn. Export preview là exact sanitized NDJSON hoặc spreadsheet-safe CSV, gồm metadata; nhập absolute destination và chỉ chọn overwrite khi muốn thay file. TTL 60 s, cap alpha 2 MiB; eviction không đổi prepared bytes. Cancel/revoke/config change có thể yêu cầu prepare lại.
-
-Explain Error tắt mặc định. Apply local Ollama endpoint literal-loopback `/api/chat` với model local đã có, hoặc HTTPS OpenAI-compatible BYOK endpoint; key lưu qua OS Secret Service (`secret-tool`), thiếu store thì BYOK unavailable. Mỗi lần Explain phải prepare/preview rồi consent cho endpoint/model đó. Không proxy/redirect, không cài model, không tự fallback cloud, không qua server TailPro. Model text được hiển thị như hypotheses/untrusted text, không execute actions.
-
-Implementation/gate cụ thể và commands manual ở [Phase 3 acceptance](docs/process/phase-03-acceptance.md); đây vẫn là internal alpha **PARTIAL**, chưa release certification.
-
-## Production context (Phase 4)
-
-Start Journal từ discovered systemd unit; cần Python 3/journalctl/quyền đọc và cursor chỉ giữ trong RAM. Settings mapping source/service → declared repo label/root không mở/index repo. Coding client tự kiểm tra relative stack hints và revision. Trace và Topology đã được gỡ khỏi desktop UI ngày25/11/2026; API/backend và evidence phase4 vẫn giữ. Backend topology cần consent exact Compose files/roots riêng, chỉ static JSON/block-YAML subset và allowlisted literal endpoint hostname hints, không đọc `.env`/runtime env hoặc execute Compose. Graph ghi configured/inferred provenance, retained error counts và unknown rate; kiểm tra approved config metadata và invalidation mỗi15 giây thuộc UI cũ đã gỡ. Xem [Phase 4 acceptance](docs/process/phase-04-acceptance.md) cho evidence và gate **PARTIAL**.
+MIT license. Font IBM Plex giữ license kèm theo trong source.

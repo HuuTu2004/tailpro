@@ -145,3 +145,6 @@ Core/desktop build được; chọn nguồn, ingest và stop sạch trên 2 host
 - Hai core libraries build headless qua default workspace members; desktop package là `tailpro-desktop`, embedded frontend dùng feature `custom-protocol`.
 - Acceptance hiện tại chạy qua desktop trên host/source được user chọn. Session/multi-source drivers cũ đã được loại bỏ; kết quả lịch sử vẫn nằm trong acceptance, không thay cho gate trên target thật.
 - Module tồn tại hoặc build pass chưa đủ đóng gate; trạng thái chính thức nằm ở process.
+
+
+25/11/2026 — Requested batch1.2/1.7: connection-and-source-picker implementation adds attempt/challenge auth, provider capability preflight, native source multi-select, bounded directory browser, preferences/history and explicit opt-in restore. Private local Windows storage and native OpenSSH key/agent transport added for distribution; Windows interactive auth remains unsupported. Source code completion and package builds are recorded separately from runtime certification in current-status.md.

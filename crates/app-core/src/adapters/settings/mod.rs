@@ -1,9 +1,10 @@
 use crate::api::{Error, HostProfile, Result, SavedView};
 use serde::{Deserialize, Serialize};
+#[cfg(unix)]
+use std::os::unix::fs::OpenOptionsExt;
 use std::{
     fs::{self, OpenOptions},
     io::Write,
-    os::unix::fs::{OpenOptionsExt, PermissionsExt},
     path::PathBuf,
 };
 #[derive(Default, Serialize, Deserialize)]
@@ -15,6 +16,18 @@ pub struct Settings {
     pub saved_views: Vec<SavedView>,
     #[serde(default)]
     pub service_mappings: Vec<crate::api::ServiceMapping>,
+    #[serde(default)]
+    pub discovery: Vec<HostPreferences>,
+    #[serde(default)]
+    pub remembered_sources: Vec<crate::api::WorkspaceSource>,
+    #[serde(default)]
+    pub workspace: crate::api::SavedWorkspace,
+}
+#[derive(Clone, Serialize, Deserialize)]
+pub struct HostPreferences {
+    pub host_id: String,
+    pub remote_identity: String,
+    pub preferences: crate::api::DiscoveryPreferences,
 }
 #[derive(Serialize, Deserialize)]
 pub struct Pin {
@@ -28,6 +41,12 @@ pub struct SettingsStore {
 impl SettingsStore {
     pub fn new(path: PathBuf) -> Self {
         Self { path }
+    }
+    pub fn directory(&self) -> Result<PathBuf> {
+        self.path
+            .parent()
+            .map(|p| p.to_owned())
+            .ok_or_else(|| Error::Invalid("settings parent".into()))
     }
     pub fn load(&self) -> Result<Settings> {
         if !self.path.exists() {
@@ -52,6 +71,9 @@ impl SettingsStore {
             || settings.pins.len() > 10_000
             || settings.saved_views.len() > 32
             || settings.service_mappings.len() > 100
+            || settings.discovery.len() > 100
+            || settings.remembered_sources.len() > 800
+            || settings.workspace.sources.len() > 8
         {
             return Err(Error::Limit("settings"));
         }
@@ -71,18 +93,19 @@ impl SettingsStore {
             .parent()
             .ok_or_else(|| Error::Invalid("settings parent".into()))?;
         fs::create_dir_all(parent)?;
-        fs::set_permissions(parent, fs::Permissions::from_mode(0o700))?;
+        tailpro_platform::protect(parent, true)?;
         let temp = parent.join(format!(".settings-{:x}", rand::random::<u64>()));
         let result = (|| -> Result<()> {
-            let mut file = OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .mode(0o600)
-                .open(&temp)?;
+            let mut options = OpenOptions::new();
+            options.write(true).create_new(true);
+            #[cfg(unix)]
+            options.mode(0o600);
+            let mut file = options.open(&temp)?;
+            tailpro_platform::protect(&temp, false)?;
             file.write_all(&bytes)?;
             file.sync_all()?;
             fs::rename(&temp, &self.path)?;
-            fs::File::open(parent)?.sync_all()?;
+            tailpro_platform::sync_parent(parent)?;
             Ok(())
         })();
         if result.is_err() {

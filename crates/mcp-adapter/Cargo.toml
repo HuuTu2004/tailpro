@@ -13,3 +13,5 @@ libc = "0.2"
 rmcp = { version = "=0.8.5", features = ["transport-io"] }
 futures-util = { version = "0.3", features = ["sink"] }
 tokio-util = { version = "0.7", features = ["codec"] }
+
+tailpro-platform = { path = "../platform" }

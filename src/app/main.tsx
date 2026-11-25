@@ -10,7 +10,7 @@ import { LiveView } from '../features/live-view/LiveView';
 import { Settings } from '../features/settings/Settings';
 import { native } from '../shared/client/native';
 import { listen } from '@tauri-apps/api/event';
-import type { AppStatus, ConnectionInfo, HostProfile } from '../shared/contracts/generated';
+import type { AppStatus, ConnectionInfo, HostProfile, SavedWorkspace, SourcesOpened } from '../shared/contracts/generated';
 import './styles.css';
 
 type Page = 'workspace' | 'connections' | 'settings' | 'new-connection';
@@ -35,7 +35,10 @@ function App() {
   const closingRef = useRef(new Set<string>());
   const selectionRevision = useRef(0);
   const statusRef = useRef<AppStatus | undefined>(undefined); statusRef.current = status;
-  const sources = status?.sources ?? [];
+  const workspace = useRef<SavedWorkspace | null>(null);
+  const workspaceDirty = useRef(false);
+  const readerOrder = useRef<string[]>([]);
+  const sources = [...(status?.sources ?? [])].sort((a, b) => readerOrder.current.indexOf(a.id) - readerOrder.current.indexOf(b.id));
   const selectedScope = selectedSources.filter(id => sources.some(source => source.id === id));
   const scope = selectedScope.length ? selectedScope : sources[0] ? [sources[0].id] : [];
   const sourcesKey = sources.map(source => source.id).join('|');
@@ -51,7 +54,7 @@ function App() {
     });
   }, [sourcesKey]);
   function setScope(ids: string[]) {
-    selectionRevision.current++;
+    selectionRevision.current++; workspaceDirty.current = true;
     const readable = [...new Set(ids)].filter(id => statusRef.current?.sources.some(source => source.id === id));
     setSelectedSources(readable);
     if (readable.length > 1) setCombinedSources(readable);
@@ -69,7 +72,10 @@ function App() {
     const revision = ++selectionRevision.current;
     openingRef.current.add(key); setOpening(new Set(openingRef.current)); setError('');
     try {
-      const id = await native.start(entry.hostId, entry.spec);
+      const [opened] = await native.openSources(entry.hostId, [entry.spec]);
+      if (!opened?.source_id || opened.error) throw new Error(opened?.error ?? 'Reader could not be opened');
+      const id = opened.source_id;
+      readerOrder.current = [...new Set([...readerOrder.current, id])];
       await refreshStatus();
       if (alive.current && revision === selectionRevision.current) selectSourceTab(id);
     } catch (reason) { if (alive.current) setError(String(reason)); }
@@ -79,7 +85,7 @@ function App() {
     if (closingRef.current.has(id)) return;
     selectionRevision.current++; closingRef.current.add(id); setClosing(new Set(closingRef.current)); setError('');
     try {
-      await native.stop(id);
+      await native.stop(id); workspaceDirty.current = true;
       if (!alive.current) return;
       const currentReaders = statusRef.current?.sources ?? [];
       const index = currentReaders.findIndex(source => source.id === id);
@@ -115,6 +121,51 @@ function App() {
     void poll();
     return () => { polling = false; alive.current = false; statusGeneration.current++; clearTimeout(timer); };
   }, []);
+
+  useEffect(() => {
+    if (managementWindow) return;
+    let mounted = true;
+    const stops: (() => void)[] = [];
+    async function loadWorkspace() { const saved = await native.savedWorkspace(); if (mounted) { workspace.current = saved; if (saved.selected_host) setSelected(saved.selected_host); } }
+    async function opened(host: string, ids: string[]) {
+      const next = await refreshStatus(); if (!mounted || !next || !ids.length) return;
+      readerOrder.current = [...new Set([...readerOrder.current, ...ids])];
+      setSelected(host); setScope(ids); setPage('workspace');
+    }
+    const catchError = (reason: unknown) => { if (mounted) setError(String(reason)); };
+    void loadWorkspace().catch(catchError);
+    void listen<SourcesOpened>('sources-opened', event => void opened(event.payload.host_id, event.payload.source_ids).catch(catchError)).then(stop => mounted ? stops.push(stop) : stop());
+    void listen<string>('connection-ready', event => void (async () => {
+      const host = event.payload;
+      await refreshStatus(); if (!mounted) return; setSelected(host);
+      const saved = await native.savedWorkspace(); workspace.current = saved;
+      const restored = await native.restoreHostSources(host);
+      const ids = restored.flatMap(row => row.source_id ? [row.source_id] : []);
+      if (ids.length) {
+        await opened(host, ids);
+        const byKey = new Map(saved.sources.map(row => [sourceKey({ hostId: row.host_id, spec: row.spec }), row.key]));
+        const state = statusRef.current;
+        const resolve = (keys: string[]) => (state?.sources ?? []).filter(row => keys.includes(byKey.get(sourceKey({ hostId: row.host_id, spec: row.spec })) ?? '')).map(row => row.id);
+        const selection = resolve(saved.selected_sources); const combined = resolve(saved.combined_sources);
+        if (selection.length) setSelectedSources(selection); if (combined.length > 1) setCombinedSources(combined);
+        const failure = restored.find(row => row.error); if (failure) setError(failure.error ?? 'Some readers need attention');
+      } else if (!(await native.rememberedSources(host)).length) await native.openLogPathEditor(host);
+    })().catch(catchError)).then(stop => mounted ? stops.push(stop) : stop());
+    void listen('workspace-preferences-changed', () => void loadWorkspace().catch(catchError)).then(stop => mounted ? stops.push(stop) : stop());
+    return () => { mounted = false; stops.forEach(stop => stop()); };
+  }, []);
+
+  useEffect(() => {
+    if (managementWindow || !workspaceDirty.current || !workspace.current || !status) return;
+    const timer = setTimeout(() => {
+      const current = statusRef.current;
+      if (!current || current.sources.some(row => !current.connections.some(host => host.host.id === row.host_id && host.state === 'connected'))) return;
+      const ids = [...new Set([...readerOrder.current, ...current.sources.map(row => row.id)])].filter(id => current.sources.some(row => row.id === id));
+      void native.saveWorkspace({ source_ids: ids, selected_sources: selectedSources, combined_sources: combinedSources, selected_host: selected || null, restore_previous_readers: workspace.current?.restore_previous_readers ?? false })
+        .then(() => { workspaceDirty.current = false; }).catch(reason => setError(String(reason)));
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [sourcesKey, selectedSources, combinedSources, selected]);
 
   const activeProfilesKey = JSON.stringify(status?.connections.map(connection => connection.host) ?? []);
   useEffect(() => {
@@ -172,7 +223,7 @@ function App() {
 
   return <div className={'app-shell' + (managementWindow ? ' management-shell' : ' log-tree-shell')}>
     {!managementWindow && <aside className="app-sidebar">
-      <HostLogTree connections={connections} sources={sources} selectedHost={selected} scope={scope} opening={opening} closing={closing} selectHost={setSelected} open={openTreeSource} connect={host => run(() => native.connect(host))} manageConnections={() => changePage('connections')}/>
+      <HostLogTree connections={connections} sources={sources} selectedHost={selected} scope={scope} opening={opening} closing={closing} selectHost={setSelected} open={openTreeSource} connect={host => run(() => native.openConnectionEditor(host.id, true))} manageConnections={() => changePage('connections')}/>
       <div className="navigator-tools"><Button variant="ghost" onClick={() => changePage('connections')}>Connections</Button><Button variant="ghost" onClick={() => changePage('settings')}>Settings</Button></div>
     </aside>}
     {managementWindow && <header className="app-header"><div className="page-title"><h1>{page === 'connections' ? 'Connections' : 'Settings'}</h1></div></header>}

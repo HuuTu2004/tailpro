@@ -15,6 +15,12 @@ pub struct HostProfile {
     pub port: Option<u16>,
     pub user: Option<String>,
     pub identity_agent: Option<String>,
+    #[serde(default)]
+    pub authentication: crate::Authentication,
+    #[serde(default)]
+    pub identity_file: Option<String>,
+    #[serde(default)]
+    pub proxy_jump: Option<String>,
     pub environment: Environment,
 }
 #[derive(Clone, Debug, Serialize, Deserialize, TS)]
@@ -64,7 +70,11 @@ pub struct Candidate {
 pub struct DiscoveryRequest {
     pub host_id: String,
     pub project_roots: Vec<String>,
+    #[serde(default)]
+    pub directories: Vec<String>,
     pub docker: bool,
+    #[serde(default)]
+    pub journal: bool,
     pub var_log: bool,
     pub pm2_root: Option<String>,
     pub selected_pids: Vec<u32>,
@@ -78,6 +88,7 @@ pub struct DiscoveryResult {
     pub candidates: Vec<Candidate>,
     pub complete: bool,
     pub reasons: Vec<String>,
+    pub coverage: Vec<crate::DiscoveryCoverage>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize, TS)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -153,6 +164,21 @@ pub struct AddLogPathResult {
 pub fn typescript() -> String {
     let config = ts_rs::Config::default();
     let declarations = [
+        crate::Authentication::decl(&config),
+        crate::ProviderCapability::decl(&config),
+        crate::DiscoveryLocation::decl(&config),
+        crate::HostCapabilities::decl(&config),
+        crate::DiscoveryCoverage::decl(&config),
+        crate::DirectoryEntry::decl(&config),
+        crate::DirectoryPage::decl(&config),
+        crate::DiscoveryPreferences::decl(&config),
+        crate::OpenSourceResult::decl(&config),
+        crate::WorkspaceSelection::decl(&config),
+        crate::WorkspaceSource::decl(&config),
+        crate::SavedWorkspace::decl(&config),
+        crate::AuthenticationChallenge::decl(&config),
+        crate::ConnectionAttempt::decl(&config),
+        crate::SourcesOpened::decl(&config),
         crate::Correlation::decl(&config),
         crate::ServiceMapping::decl(&config),
         crate::ServiceCandidate::decl(&config),

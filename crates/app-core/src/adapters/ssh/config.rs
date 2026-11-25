@@ -121,7 +121,7 @@ impl Importer {
     }
 }
 pub fn home() -> Result<PathBuf> {
-    std::env::var_os("HOME")
+    std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
         .map(PathBuf::from)
         .ok_or_else(|| Error::Invalid("HOME unavailable".into()))
 }
@@ -151,9 +151,10 @@ pub fn load() -> Result<Manifest> {
     };
     i.read(&home()?.join(".ssh/config"), 0)?;
     i.text.push_str("Host *\n");
+    #[cfg(unix)]
     i.read(Path::new("/etc/ssh/ssh_config"), 0)?;
     // Binary identity, trust mode and inherited agent participate in mux generation.
-    let binary = fs::read("/usr/bin/ssh")?;
+    let binary = fs::read(ssh_binary())?;
     i.hash.update(binary);
     i.hash.update(b"strict-host-key/no-forwarding/v1");
     if let Some(socket) = std::env::var_os("SSH_AUTH_SOCK") {
@@ -218,6 +219,57 @@ pub fn load() -> Result<Manifest> {
     })
 }
 impl Manifest {
+    pub fn user_trust_paths(&self, target: &str) -> Result<Vec<PathBuf>> {
+        let target = target.rsplit('@').next().unwrap_or(target);
+        let mut active = true;
+        let mut dynamic_scope = false;
+        for line in self.text.lines() {
+            let words = tokenize(line)?;
+            let Some(key) = words.first() else {
+                continue;
+            };
+            let key = key.to_ascii_lowercase();
+            if key == "host" {
+                dynamic_scope = false;
+                let mut positive = false;
+                let mut negative = false;
+                for word in &words[1..] {
+                    let (negated, pattern) = word
+                        .strip_prefix('!')
+                        .map_or((false, word.as_str()), |p| (true, p));
+                    if glob::Pattern::new(pattern)
+                        .map_err(|_| Error::Invalid("Host pattern".into()))?
+                        .matches(target)
+                    {
+                        if negated {
+                            negative = true;
+                        } else {
+                            positive = true;
+                        }
+                    }
+                }
+                active = positive && !negative;
+            } else if key == "match" {
+                dynamic_scope = true;
+            } else if key == "userknownhostsfile" && (active || dynamic_scope) {
+                if dynamic_scope || words.iter().skip(1).any(|p| p.contains(['%', '$', '`'])) {
+                    return Err(Error::NeedsAction(
+                        "Use static UserKnownHostsFile paths for in-app fingerprint verification"
+                            .into(),
+                    ));
+                }
+                return words.iter().skip(1).filter(|p| p.as_str() != "none").map(|p| {
+                    let path = expand_home(p)?;
+                    if !path.is_absolute() { return Err(Error::NeedsAction("Use absolute known_hosts paths for in-app fingerprint verification".into())); }
+                    Ok(path)
+                }).collect();
+            }
+        }
+        Ok(vec![
+            home()?.join(".ssh/known_hosts"),
+            home()?.join(".ssh/known_hosts2"),
+        ])
+    }
     pub fn needs_consent(&self, target: &str) -> Result<bool> {
         let mut pending = vec![target.to_string()];
         let mut visited = BTreeSet::new();
@@ -350,11 +402,24 @@ fn tokenize(line: &str) -> Result<Vec<String>> {
 }
 
 fn bounded_glob(pattern: &Path, cap: usize) -> Result<Vec<PathBuf>> {
-    let mut paths = vec![PathBuf::from("/")];
+    let mut paths = vec![PathBuf::new()];
     for component in pattern.components() {
         use std::path::Component;
-        let Component::Normal(name) = component else {
-            continue;
+        let name = match component {
+            Component::Normal(name) => name,
+            Component::Prefix(prefix) => {
+                for path in &mut paths {
+                    path.push(prefix.as_os_str());
+                }
+                continue;
+            }
+            Component::RootDir => {
+                for path in &mut paths {
+                    path.push(std::path::MAIN_SEPARATOR.to_string());
+                }
+                continue;
+            }
+            _ => return Err(Error::Invalid("Absolute Include path required".into())),
         };
         let name = name.to_string_lossy();
         let mut next = vec![];
@@ -387,4 +452,17 @@ fn bounded_glob(pattern: &Path, cap: usize) -> Result<Vec<PathBuf>> {
     }
     paths.retain(|p| p.exists());
     Ok(paths)
+}
+
+/// Use the operating system SSH client, never a shell or an untrusted working-directory executable.
+pub fn ssh_binary() -> PathBuf {
+    #[cfg(windows)]
+    {
+        PathBuf::from(std::env::var_os("SystemRoot").unwrap_or_else(|| "C:\\Windows".into()))
+            .join("System32/OpenSSH/ssh.exe")
+    }
+    #[cfg(unix)]
+    {
+        PathBuf::from("/usr/bin/ssh")
+    }
 }

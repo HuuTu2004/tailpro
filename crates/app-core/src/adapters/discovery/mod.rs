@@ -20,6 +20,7 @@ pub async fn discover(
         return Err(Error::Invalid("host mismatch".into()));
     }
     if request.project_roots.len() > 16
+        || request.directories.len() > 16
         || request.selected_pids.len() > 32
         || request.selected_units.len() > 32
         || request.config_files.len() > 32
@@ -30,6 +31,7 @@ pub async fn discover(
     for p in request
         .project_roots
         .iter()
+        .chain(request.directories.iter())
         .chain(request.config_files.iter())
         .chain(request.config_roots.iter())
         .chain(request.pm2_root.iter())
@@ -134,11 +136,16 @@ async fn probe(
     let mut candidates = vec![];
     let mut reasons = vec![];
     let mut done = false;
+    let mut coverage = vec![];
     if partial {
         reasons.push("discovery deadline/output cap; partial metadata retained".into());
     }
     for line in bytes.split(|&b| b == b'\n').filter(|b| !b.is_empty()) {
         let v: Value = serde_json::from_slice(line)?;
+        if v.get("coverage").is_some() {
+            coverage.push(serde_json::from_value(v["coverage"].clone())?);
+            continue;
+        }
         if let Some(path) = v["growth"].as_str() {
             if let Some(c) = candidates
                 .iter_mut()
@@ -198,10 +205,24 @@ async fn probe(
     if !diagnostic.is_empty() {
         reasons.push("remote provider unavailable; Python 3 is required".into());
     }
-    candidates.sort_by_key(|c| (c.provider == "systemd_unit", !c.path.ends_with(".log")));
+    candidates.sort_by_key(|c| {
+        (
+            c.tags.iter().any(|tag| tag == "archive_hint"),
+            c.provider == "systemd_unit",
+            !c.path.ends_with(".log"),
+        )
+    });
     Ok(DiscoveryResult {
-        complete: done && reasons.is_empty(),
+        complete: done
+            && reasons.is_empty()
+            && coverage.iter().all(|c: &crate::api::DiscoveryCoverage| {
+                matches!(
+                    c.state.as_str(),
+                    "complete" | "unsupported" | "not_selected"
+                )
+            }),
         candidates,
         reasons,
+        coverage,
     })
 }

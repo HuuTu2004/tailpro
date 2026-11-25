@@ -18,6 +18,7 @@ pub(crate) enum RemoteOperation {
     Topology(Value),
     Kubernetes(Value),
     Discovery(Value),
+    HostMetadata(Value),
 }
 impl RemoteOperation {
     pub fn render(self) -> Result<String> {
@@ -56,6 +57,7 @@ impl RemoteOperation {
                 Ok(python(include_str!("file_helper.py"), &args))
             }
             Self::Discovery(args) => Ok(python(include_str!("../discovery/probe.py"), &args)),
+            Self::HostMetadata(args) => Ok(python(include_str!("../discovery/inspect.py"), &args)),
         }
     }
 }
@@ -72,6 +74,11 @@ pub(crate) async fn inspect(
     operation: RemoteOperation,
     cancel: &tokio_util::sync::CancellationToken,
 ) -> Result<Value> {
+    let output_cap = if matches!(&operation, RemoteOperation::HostMetadata(_)) {
+        256 * 1024
+    } else {
+        32 * 1024
+    };
     let _permit = tokio::select! {_=cancel.cancelled()=>return Err(Error::Cancelled),p=session.probes.clone().acquire_owned()=>p.map_err(|_|Error::Cancelled)?};
     let mut channel = session.spawn(operation).await?;
     let stdout = channel.child.stdout.take().unwrap();
@@ -79,7 +86,7 @@ pub(crate) async fn inspect(
     let diagnostic = tokio::spawn(crate::adapters::ssh::bounded_read(stderr, 4096));
     let result = tokio::select! {
         _=cancel.cancelled()=>Err(Error::Cancelled),_=session.cancel.cancelled()=>Err(Error::Cancelled),
-        r=tokio::time::timeout(std::time::Duration::from_secs(15),crate::adapters::ssh::bounded_read(stdout,32*1024))=>r.map_err(|_|Error::Timeout).and_then(|r|r).and_then(|bytes|serde_json::from_slice(&bytes).map_err(Error::from))
+        r=tokio::time::timeout(std::time::Duration::from_secs(15),crate::adapters::ssh::bounded_read(stdout,output_cap))=>r.map_err(|_|Error::Timeout).and_then(|r|r).and_then(|bytes|serde_json::from_slice(&bytes).map_err(Error::from))
     };
     channel.close().await;
     diagnostic.abort();

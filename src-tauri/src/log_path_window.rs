@@ -3,7 +3,7 @@ use tauri::{Emitter, Manager};
 
 const LABEL: &str = "log-path-editor";
 
-fn editor_host(window: &tauri::WebviewWindow) -> Result<String, String> {
+pub(crate) fn editor_host(window: &tauri::WebviewWindow) -> Result<String, String> {
     if window.label() != LABEL {
         return Err("Add log window required".into());
     }
@@ -47,9 +47,9 @@ pub async fn open_log_path_editor(
         .append_pair("host", &host_id);
     let path = format!("index.html?{}", route.query().unwrap_or_default());
     tauri::WebviewWindowBuilder::new(&app, LABEL, tauri::WebviewUrl::App(path.into()))
-        .title("TailPro · Add log path")
-        .inner_size(480.0, 260.0)
-        .min_inner_size(400.0, 240.0)
+        .title("TailPro · Open logs")
+        .inner_size(920.0, 660.0)
+        .min_inner_size(700.0, 520.0)
         .decorations(true)
         .resizable(true)
         .on_navigation(|url| {

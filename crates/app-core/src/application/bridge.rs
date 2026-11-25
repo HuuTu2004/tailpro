@@ -1,33 +1,34 @@
-//! Private Unix bridge lifecycle. The adapter never owns cleanup or starts an engine.
+#[cfg(unix)]
+use std::os::{
+    fd::AsRawFd,
+    unix::fs::{FileTypeExt, MetadataExt, OpenOptionsExt, PermissionsExt},
+};
+#[cfg(windows)]
+use tokio::net::{TcpListener as UnixListener, TcpStream as UnixStream};
+#[cfg(unix)]
+use tokio::net::{UnixListener, UnixStream};
+// Private local bridge lifecycle. The adapter never owns cleanup or starts an engine.
 use super::{output::*, *};
 use app_protocol::*;
 use std::{
     fs::{self, File, OpenOptions},
     io::{Read, Write},
-    os::{
-        fd::AsRawFd,
-        unix::fs::{FileTypeExt, MetadataExt, OpenOptionsExt, PermissionsExt},
-    },
     path::{Path, PathBuf},
 };
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
-    net::{UnixListener, UnixStream},
     sync::Semaphore,
 };
 
+#[cfg(unix)]
 fn uid() -> u32 {
     unsafe { libc::geteuid() }
 }
 fn private(path: &Path, mode: u32) -> Result<()> {
-    let meta = fs::symlink_metadata(path)?;
-    if meta.file_type().is_symlink() || meta.uid() != uid() || meta.mode() & 0o777 != mode {
-        return Err(Error::NeedsAction(
-            "Private runtime ownership/permissions invalid".into(),
-        ));
-    }
+    tailpro_platform::check_private(path, mode == 0o700)?;
     Ok(())
 }
+#[cfg(unix)]
 pub fn runtime_dir() -> Result<PathBuf> {
     let base = if let Some(base) = std::env::var_os("XDG_RUNTIME_DIR") {
         let p = PathBuf::from(base);
@@ -46,42 +47,49 @@ pub fn runtime_dir() -> Result<PathBuf> {
     }
     Ok(path)
 }
+#[cfg(windows)]
+pub fn runtime_dir() -> Result<PathBuf> {
+    let base = PathBuf::from(std::env::var_os("LOCALAPPDATA").ok_or_else(denied)?);
+    let path = base.join("tailpro-bridge");
+    create_private(&path)?;
+    Ok(path)
+}
 fn create_private(path: &Path) -> Result<()> {
-    use std::os::unix::fs::DirBuilderExt;
-    match fs::DirBuilder::new().mode(0o700).create(path) {
-        Ok(()) => {}
-        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
-        Err(e) => return Err(e.into()),
-    }
-    private(path, 0o700)?;
-    if !fs::symlink_metadata(path)?.is_dir() {
-        return Err(denied());
-    }
-    Ok(())
+    Ok(tailpro_platform::create_private_dir(path)?)
 }
 fn open_private(path: &Path, create: bool) -> Result<File> {
-    let file = OpenOptions::new()
-        .read(true)
-        .write(create)
-        .create(create)
+    if path.exists() {
+        private(path, 0o600)?;
+    }
+    let mut options = OpenOptions::new();
+    options.read(true).write(create).create(create);
+    #[cfg(unix)]
+    options
         .mode(0o600)
-        .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC | libc::O_NONBLOCK)
-        .open(path)?;
-    let m = file.metadata()?;
-    if !m.is_file() || m.uid() != uid() || m.mode() & 0o777 != 0o600 || m.nlink() != 1 {
+        .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC | libc::O_NONBLOCK);
+    let file = options.open(path)?;
+    #[cfg(windows)]
+    if create {
+        tailpro_platform::protect(path, false)?;
+    }
+    if !file.metadata()?.is_file() {
         return Err(denied());
     }
+    private(path, 0o600)?;
     Ok(file)
 }
 pub struct Bridge {
     pub directory: PathBuf,
+    #[cfg_attr(windows, allow(dead_code))]
     socket: PathBuf,
+    #[cfg(unix)]
     inode: u64,
     _lock: File,
     cancel: CancellationToken,
     task: tokio::task::JoinHandle<()>,
 }
 impl Bridge {
+    #[cfg(unix)]
     pub async fn start(app: AppHandle) -> Result<Self> {
         app.output.maintain(app.cancel.clone());
         let directory = runtime_dir()?;
@@ -173,6 +181,7 @@ impl Bridge {
     pub async fn close(self) {
         self.cancel.cancel();
         let _ = self.task.await;
+        #[cfg(unix)]
         if fs::symlink_metadata(&self.socket)
             .is_ok_and(|m| m.ino() == self.inode && m.uid() == uid() && m.file_type().is_socket())
         {
@@ -217,6 +226,7 @@ async fn serve(
     app: AppHandle,
     preauth: tokio::sync::OwnedSemaphorePermit,
 ) -> Result<()> {
+    #[cfg(unix)]
     if stream.peer_cred()?.uid() != uid() {
         return Err(denied());
     }
@@ -327,12 +337,15 @@ pub fn publish_private_checked<G>(
     }
     let temp = parent.join(format!(".tailpro-{}.tmp", opaque()));
     let outcome = (|| -> Result<()> {
-        let mut f = OpenOptions::new()
-            .write(true)
-            .create_new(true)
+        let mut options = OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        options
             .mode(0o600)
-            .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
-            .open(&temp)?;
+            .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC);
+        let mut f = options.open(&temp)?;
+        #[cfg(windows)]
+        tailpro_platform::protect(&temp, false)?;
         for chunk in bytes.chunks(64 * 1024) {
             if cancel.is_cancelled() {
                 return Err(Error::Cancelled);
@@ -352,7 +365,7 @@ pub fn publish_private_checked<G>(
             fs::remove_file(&temp)?;
         }
         drop(_authorization);
-        File::open(parent)?.sync_all()?;
+        tailpro_platform::sync_parent(parent)?;
         Ok(())
     })();
     let _ = fs::remove_file(temp);
@@ -368,4 +381,58 @@ pub fn read_registry(path: &Path) -> Result<BridgeRegistry> {
     let mut bytes = Vec::new();
     f.take(4097).read_to_end(&mut bytes)?;
     Ok(serde_json::from_slice(&bytes)?)
+}
+
+#[cfg(windows)]
+impl Bridge {
+    pub async fn start(app: AppHandle) -> Result<Self> {
+        app.output.maintain(app.cancel.clone());
+        let directory = runtime_dir()?;
+        let lock = open_private(&directory.join("instance.lock"), true)?;
+        lock.try_lock().map_err(|_| {
+            Error::NeedsAction("Another TailPro instance owns the local bridge".into())
+        })?;
+        let listener = UnixListener::bind((std::net::Ipv4Addr::LOCALHOST, 0)).await?;
+        let port = listener.local_addr()?.port();
+        let socket = directory.join(format!("session-{}.{port}.sock", &app.output.session[..32]));
+        let registry = BridgeRegistry {
+            schema_version: WIRE_VERSION,
+            session: app.output.session.clone(),
+            socket: socket.file_name().unwrap().to_string_lossy().into_owned(),
+        };
+        publish_private(
+            &directory.join("registry.json"),
+            &serde_json::to_vec(&registry)?,
+            true,
+            &app.cancel,
+        )?;
+        let cancel = app.cancel.child_token();
+        let stop = cancel.clone();
+        let task = tokio::spawn(async move {
+            let sockets = Arc::new(Semaphore::new(8));
+            let preauth = Arc::new(Semaphore::new(2));
+            let mut tasks = tokio::task::JoinSet::new();
+            loop {
+                tokio::select! {
+                    _ = stop.cancelled() => break,
+                    Some(_) = tasks.join_next(), if !tasks.is_empty() => {},
+                    accepted = listener.accept() => {
+                        let Ok((stream, _)) = accepted else { break; };
+                        let Ok(socket_permit) = sockets.clone().try_acquire_owned() else { continue; };
+                        let Ok(auth_permit) = preauth.clone().try_acquire_owned() else { continue; };
+                        let app = app.clone(); tasks.spawn(async move { let _socket = socket_permit; let _ = serve(stream, app, auth_permit).await; });
+                    }
+                }
+            }
+            tasks.abort_all();
+            while tasks.join_next().await.is_some() {}
+        });
+        Ok(Self {
+            directory,
+            socket,
+            _lock: lock,
+            cancel,
+            task,
+        })
+    }
 }

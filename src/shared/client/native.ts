@@ -1,8 +1,26 @@
+import type { HostCapabilities, DirectoryPage, DiscoveryPreferences, OpenSourceResult, SavedWorkspace, WorkspaceSelection, ConnectionAttempt } from '../contracts/generated';
 import type { KubernetesCapability, ReadRequest, ReadResponse, ServiceMapping, TopologyRequest, TopologyGraph } from '../contracts/generated';
 import { invoke } from '@tauri-apps/api/core';
 import type { GrantInfo, Enrollment, Selection, ExportFormat, PreparedPreview, ExplainProvider, Explanation } from '../contracts/generated';
 import type { AppStatus, ConfigImport, DiscoveryRequest, DiscoveryResult, HostProfile, SourceSpec, ViewRequest, ViewPage, ViewNotice, DetailRequest, EventDetail, SavedView } from '../contracts/generated';
 export const native = {
+  beginConnection: (profile: HostProfile, consent: boolean, testOnly: boolean) => invoke<string>('begin_connection', { profile, consent, testOnly }),
+  connectionAttempt: (id: string) => invoke<ConnectionAttempt>('connection_attempt', { id }),
+  answerAuthentication: (attempt: string, challenge: string, value: string, verified: boolean) => invoke<void>('answer_authentication', { attempt, challenge, value, verified }),
+  cancelConnectionAttempt: () => invoke<void>('cancel_connection_attempt'),
+  pickIdentityFile: () => invoke<string | null>('pick_identity_file'),
+  forgetHost: (hostId: string) => invoke<void>('forget_host', { hostId }),
+  inspectHost: (hostId: string, refresh = false) => invoke<HostCapabilities>('inspect_host', { hostId, refresh }),
+  browseDirectory: (hostId: string, path: string, cursor: string | null = null) => invoke<DirectoryPage>('browse_directory', { hostId, path, cursor }),
+  discoveryPreferences: (hostId: string) => invoke<DiscoveryPreferences>('discovery_preferences', { hostId }),
+  saveDiscoveryPreferences: (hostId: string, preferences: DiscoveryPreferences) => invoke<void>('save_discovery_preferences', { hostId, preferences }),
+  rememberedSources: (hostId: string) => invoke<SourceSpec[]>('remembered_sources', { hostId }),
+  cancelSourceOpen: (hostId: string) => invoke<void>('cancel_source_open', { hostId }),
+  openSources: (hostId: string, specs: SourceSpec[]) => invoke<OpenSourceResult[]>('open_sources', { hostId, specs }),
+  savedWorkspace: () => invoke<SavedWorkspace>('saved_workspace'),
+  saveWorkspace: (selection: WorkspaceSelection) => invoke<void>('save_workspace', { selection }),
+  setRestoreReaders: (enabled: boolean) => invoke<void>('set_restore_readers', { enabled }),
+  restoreHostSources: (hostId: string) => invoke<OpenSourceResult[]>('restore_host_sources', { hostId }),
   inspectKubernetes: (hostId: string, kubeconfig: string, context: string, namespace: string, pod: string, container: string) => invoke<KubernetesCapability>('inspect_kubernetes', { hostId, kubeconfig, context, namespace, pod, container }),
   previewParser: (source: string, config: string, sample: string) => invoke<string>('preview_parser', { source, config, sample }),
   applyParser: (source: string, config: string) => invoke<string>('apply_parser', { source, config }),
@@ -13,8 +31,8 @@ export const native = {
   closeLogPathEditor: () => invoke<void>('close_log_path_editor'),
   submitLogPath: (requestId: string, path: string) => invoke<void>('submit_log_path', { requestId, path }),
   finishLogPath: (requestId: string, error: string | null) => invoke<void>('finish_log_path', { requestId, error }),
-  openConnectionEditor: () => invoke<void>('open_connection_editor'),
-  closeConnectionEditor: () => invoke<void>('close_connection_editor'),
+  openConnectionEditor: (profileId?: string, autoConnect = false) => invoke<void>('open_connection_editor', { profileId: profileId ?? null, autoConnect }),
+  closeConnectionEditor: (profileId?: string) => invoke<void>('close_connection_editor', { profileId: profileId ?? null }),
   testConnection: (profile: HostProfile, consent: boolean) => invoke<void>('test_connection', { profile, consent }),
   cancelConnectionTest: () => invoke<void>('cancel_connection_test'),
   saveHostProfile: (profile: HostProfile) => invoke<void>('save_host_profile', { profile }),

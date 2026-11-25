@@ -1,4 +1,10 @@
-//! MCP SDK stays in this executable. No engine, SSH, provider, or shell capability.
+#[cfg(unix)]
+use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
+#[cfg(windows)]
+use tokio::net::TcpStream as UnixStream;
+#[cfg(unix)]
+use tokio::net::UnixStream;
+// MCP SDK stays in this executable. No engine, SSH, provider, or shell capability.
 use app_protocol::*;
 use futures_util::{SinkExt, StreamExt};
 use rmcp::{
@@ -10,12 +16,10 @@ use rmcp::{
 use std::{
     fs::OpenOptions,
     io::Read,
-    os::unix::fs::{MetadataExt, OpenOptionsExt},
     path::{Path, PathBuf},
 };
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
-    net::UnixStream,
     sync::Mutex,
 };
 use tokio_util::codec::{FramedRead, FramedWrite};
@@ -89,6 +93,7 @@ impl ServerHandler for Adapter {
         }
     }
 }
+#[cfg(unix)]
 fn registry(path: &Path) -> Result<BridgeRegistry, ()> {
     let m = std::fs::symlink_metadata(path.parent().ok_or(())?).map_err(|_| ())?;
     if !m.is_dir() || m.uid() != unsafe { libc::geteuid() } || m.mode() & 0o777 != 0o700 {
@@ -149,8 +154,11 @@ async fn connect() -> Result<UnixStream, ()> {
             return Err(());
         }
         let socket = path.parent().ok_or(())?.join(&r.socket);
+        #[cfg(unix)]
         let m = std::fs::symlink_metadata(&socket).map_err(|_| ())?;
+        #[cfg(unix)]
         use std::os::unix::fs::FileTypeExt;
+        #[cfg(unix)]
         if !m.file_type().is_socket()
             || m.uid() != unsafe { libc::geteuid() }
             || m.mode() & 0o777 != 0o600
@@ -159,10 +167,11 @@ async fn connect() -> Result<UnixStream, ()> {
         }
         if let Ok(Ok(mut stream)) = tokio::time::timeout(
             std::time::Duration::from_millis(100),
-            UnixStream::connect(socket),
+            connect_socket(&socket),
         )
         .await
         {
+            #[cfg(unix)]
             if stream.peer_cred().map_err(|_| ())?.uid() != unsafe { libc::geteuid() } {
                 return Err(());
             }
@@ -265,4 +274,34 @@ async fn main() {
             std::process::exit(1)
         }
     }
+}
+
+#[cfg(unix)]
+async fn connect_socket(path: &Path) -> std::io::Result<UnixStream> {
+    UnixStream::connect(path).await
+}
+#[cfg(windows)]
+async fn connect_socket(path: &Path) -> std::io::Result<UnixStream> {
+    let name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or(std::io::ErrorKind::InvalidInput)?;
+    let port: u16 = name
+        .strip_suffix(".sock")
+        .and_then(|name| name.rsplit('.').next())
+        .and_then(|port| port.parse().ok())
+        .ok_or(std::io::ErrorKind::InvalidInput)?;
+    UnixStream::connect((std::net::Ipv4Addr::LOCALHOST, port)).await
+}
+#[cfg(windows)]
+fn registry(path: &Path) -> Result<BridgeRegistry, ()> {
+    tailpro_platform::check_private(path.parent().ok_or(())?, true).map_err(|_| ())?;
+    tailpro_platform::check_private(path, false).map_err(|_| ())?;
+    let f = OpenOptions::new().read(true).open(path).map_err(|_| ())?;
+    if !f.metadata().map_err(|_| ())?.is_file() || f.metadata().map_err(|_| ())?.len() > 4096 {
+        return Err(());
+    }
+    let mut bytes = Vec::new();
+    f.take(4097).read_to_end(&mut bytes).map_err(|_| ())?;
+    serde_json::from_slice(&bytes).map_err(|_| ())
 }
