@@ -1,10 +1,10 @@
 # Tiến độ hiện tại
 
-Cập nhật: 20/11/2026, Asia/Bangkok. Snapshot implementation tại workspace `tailpro`; docs ở `docs/`.
+Cập nhật: 25/11/2026, Asia/Bangkok. Snapshot implementation tại workspace `tailpro`; docs ở `docs/`.
 
 | Mục | Trạng thái thực tế |
 | --- | --- |
-| Scope vừa triển khai | Phase 4, code 4.1–4.7 theo yêu cầu toàn file; giữ các prerequisite gates Phase 1–3 |
+| Scope vừa triển khai | 6.1: chốt ingestion schema v1/domain primitives; giữ implementation phase4 và các prerequisite/runtime gates trước đó |
 | Code | Rust/Tauri/React viewer + Journal, tám MCP tools/schema 2, service mapping/code hints, trace duration/event UI và opt-in static topology |
 | Validation | Core/adapter/native clippy/build, frontend build; synthetic grouping/correlation/caps/ACK/Compose probes, raw MCP + Codex tools, Claude handshake; xem acceptance từng phase |
 | Phase gate | **PARTIAL — chưa fully accepted**; không coi feature code là runtime/release certification |
@@ -62,7 +62,16 @@ Evidence/commands/caps alpha cụ thể ở [acceptance phase 3](phase-03-accept
 
 Evidence/commands và giới hạn ở [acceptance phase 4](phase-04-acceptance.md). **PARTIAL**; topology metadata freshness đã có bounded polling 15s; không dùng code/CLI handshake để thay runtime gates.
 
-## Evidence chính
+## Phase 6 — Schema và universal ingestion
+
+| Mục | Trạng thái / evidence | Gate còn thiếu |
+| --- | --- | --- |
+| 6.1 | Schema v1 chốt; checked borrowed payload ranges, canonical nanosecond strings, three-clock display selection, severity namespaces/origin và shared disposition; Clippy/fmt/reverse-dependents check và manual walkthrough PASS | Đây là schema foundations; retained Event/readers/DTO chưa migrate. Current nested-key order/numeric-time gaps được ghi, chưa coi parser accepted |
+| 6.2–6.12 | Planned theo [plan phase6](../plan/phase-06-universal-log-ingestion.md) | Original-byte fragments/redaction/ACK, typed mapping/decoders/multiline/rules, diagnostics, source runtime, optimization và Kubernetes gates |
+
+Xem [schema contract](../system-design/ingestion-schema.md) và [acceptance6.1](phase-06-acceptance.md). Next implementation scope đề xuất6.2; không thay thứ tự đóng runtime/release gates phase1–5 đã ghi.
+
+## Evidence phase 1–4
 
 Xem [acceptance phase 1](phase-01-acceptance.md) để biết commands, version, fixture và giới hạn.
 
@@ -72,6 +81,12 @@ Xem [acceptance phase 1](phase-01-acceptance.md) để biết commands, version,
 - Desktop build dùng dev packages extract vào `/tmp` vì sudo yêu cầu interactive auth. Không cài package/daemon vào VPS hoặc sửa SSH/known_hosts thật.
 
 ## Next action
+
+### Bộ chọn nguồn theo host ngày 25/11/2026
+
+UI mục 2.1 đã thay Source scope dạng checkbox bằng hàng ô theo host: All hosts, All của host, từng File/Docker/Journal và Combine sources để xem nhiều nguồn chung bảng. All của host tự bao gồm nguồn mới; Add path có form tại hàng, Start & view dùng typed start_source hiện có; Discover sources mở đúng host/tab và chưa tự discovery. Columns tách riêng, source health vẫn ngoài query filters. Giữ giới hạn tám nguồn và bỏ source ID không còn trong status khi sửa nhóm chọn. Development preview có thể thêm nguồn mẫu thật vào trạng thái demo; không đọc file hoặc gọi data IPC thật.
+
+Đã chạy frontend typecheck/build và kiểm tra trực tiếp qua browser với mock: chọn một nguồn, gộp hai nguồn, gộp giữa hai host, bỏ chọn tới nguồn cuối, All host chỉ trả đúng host, thêm file tăng từ hai lên ba nguồn trong All host, Cancel không thêm nguồn và Discover mở đúng tab. Event details vẫn mở trong khung bảng, scrollbar/viewport đồng bộ scrollLeft=500. Layout 1280×840 và 900×600 không tràn ngang trang; scrollbar ngang nằm trong phần nhìn thấy, bảng ở 900×600 còn 168px khi form đóng/follow-live. Demo badge hiển thị cả cửa sổ nhỏ. Kiểm tra này không xác nhận quyền đọc/ingestion của file trên SSH server thật; không viết automated tests hoặc thay đổi backend.
 
 ### UI và connection manager ngày 20/11/2026
 

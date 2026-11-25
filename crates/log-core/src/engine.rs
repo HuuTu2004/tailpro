@@ -1,3 +1,4 @@
+pub use crate::model::ingestion::Disposition;
 use crate::{
     model::{Counters, Event, MAX_SOURCES, MIB},
     store::{Segment, SourceStore},
@@ -52,11 +53,8 @@ pub struct CatchUp {
     pub fence: String,
     pub complete: bool,
 }
-#[derive(Debug)]
-pub enum Disposition {
-    Accepted,
-    Gap,
-}
+/// Consumption acknowledgement for source-local physical units. Only a contiguous
+/// terminal prefix may advance a checkpoint; neither outcome is a durable ACK.
 pub struct Ack {
     pub generation: u64,
     pub physical: Vec<u64>,
@@ -76,6 +74,7 @@ pub struct Snapshot {
     pub fence: u64,
     pub watermark: u64,
     pub source_losses: BTreeMap<String, u64>,
+    pub source_metrics: BTreeMap<String,crate::model::IngestionMetrics>,
     until: Instant,
     slots: Arc<AtomicUsize>,
 }
@@ -216,7 +215,7 @@ impl Engine {
         charged <= SOURCE_BYTES && rows <= ROW_CAP
     }
     pub fn append(&mut self, mut event: Event, generation: u64) -> Result<Ack, Error> {
-        if event.raw.len() > crate::model::FRAME_BYTES
+        if event.raw.bytes().len() > crate::model::FRAME_BYTES
             || event.message.len() > crate::model::FRAME_BYTES
             || event.physical.len() > 200
             || event.physical.is_empty()
@@ -235,6 +234,13 @@ impl Engine {
         {
             return Err(Error::Stale);
         }
+        let raw_bytes=(event.raw.bytes().len()+event.ending.bytes().len()) as u64;
+        let m=&mut self.sources.get_mut(&source).unwrap().metrics;
+        m.admission_units=m.admission_units.saturating_add(1);
+        m.observed_bytes=m.observed_bytes.saturating_add(raw_bytes);
+        m.physical_records=m.physical_records.saturating_add(if !event.checkpoint_complete||matches!(event.ending,crate::model::RecordEnding::Fragment|crate::model::RecordEnding::Interrupted){0}else{event.physical.len() as u64});
+        m.raw_fallback+=u64::from(matches!(event.evidence.decoder,crate::model::evidence::Decoder::Raw));
+        m.malformed+=u64::from(event.quality.malformed);m.encoding_loss+=u64::from(event.quality.lossy_utf8);m.conflicts+=u64::from(event.evidence.conflict);m.fragments+=u64::from(event.fragment.is_some());
         // Continuity markers must survive filtered reads as coverage metadata.
         // A level:error/trace predicate may exclude the marker itself.
         if event.stream == crate::model::Stream::System && event.quality.uncertain {
@@ -251,6 +257,7 @@ impl Engine {
             store.seal();
             if !store.removable(SOURCE_FLOOR, ROW_FLOOR) {
                 self.counters.discarded += event.physical.len() as u64;
+                let m=&mut self.sources.get_mut(&source).unwrap().metrics;m.gap_units+=1;m.gap_bytes=m.gap_bytes.saturating_add(raw_bytes);
                 self.change(&source, ChangeKind::Gap);
                 return Ok(Ack {
                     generation,
@@ -260,6 +267,7 @@ impl Engine {
             }
             let removed = store.sealed.pop_front().unwrap();
             store.rows -= removed.events.len();
+            store.metrics.retention_evicted_bytes=store.metrics.retention_evicted_bytes.saturating_add(removed.events.iter().map(|e|(e.raw.bytes().len()+e.ending.bytes().len()) as u64).sum::<u64>());
             self.counters.evicted += removed.events.len() as u64;
             drop(removed);
             self.change(&source, ChangeKind::Evict);
@@ -268,6 +276,7 @@ impl Engine {
         let store = self.sources.get_mut(&source).unwrap();
         store.resident.fetch_add(bytes, Ordering::Relaxed);
         store.tail_bytes += bytes;
+        store.metrics.accepted_units+=1;store.metrics.represented_bytes=store.metrics.represented_bytes.saturating_add(raw_bytes);
         store.tail.push(event);
         store.rows += 1;
         if store.tail_bytes >= SEGMENT_BYTES || store.tail.len() >= SEGMENT_ROWS {
@@ -360,6 +369,7 @@ impl Engine {
             fence: self.revision,
             watermark: self.sequence,
             source_losses: self.source_losses.clone(),
+            source_metrics: self.sources.iter().map(|(id,s)|(id.clone(),s.metrics.clone())).collect(),
             until: Instant::now() + Duration::from_secs(60),
             slots: self.leases.clone(),
         })

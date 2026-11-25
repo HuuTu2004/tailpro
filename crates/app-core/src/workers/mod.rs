@@ -1,3 +1,4 @@
+pub(crate) mod parser;
 use crate::api::{Error, LogPreview, Preview, Result, ViewNotice};
 use log_core::{
     engine::{Ack, Engine, Snapshot},
@@ -55,8 +56,13 @@ pub struct Ingest {
     sender: mpsc::SyncSender<Queued>,
     bytes: Arc<Semaphore>,
     cancel: CancellationToken,
+    pub(crate) parser: Arc<std::sync::RwLock<Arc<parser::Parser>>>,
 }
 impl Ingest {
+    /// Fragment mode never interprets a suffix as a fresh structured record.
+    pub fn raw(&self, bytes: Vec<u8>, stream: log_core::model::Stream, physical: u64) -> Event {
+        log_core::parse::raw(bytes, &self.source, self.generation, stream, physical, crate::application::now_ms())
+    }
     pub async fn normalize(
         &self,
         bytes: Vec<u8>,
@@ -68,15 +74,19 @@ impl Ingest {
             return Err(Error::Limit("normalization frame"));
         }
         let observed = crate::application::now_ms();
+        let parser=self.parser.read().unwrap().clone();
         if bytes.len() < 4096 {
-            return Ok(log_core::parse::normalize(
+            let mut event=log_core::parse::normalize_with(
                 &bytes,
                 &self.source,
                 self.generation,
                 stream,
                 physical,
                 observed,
-            ));
+                &parser.profile,
+            );
+            parser.apply(&mut event);
+            return Ok(event);
         }
         let background = tokio::select! {
             _=cancel.cancelled()=>return Err(Error::Cancelled),
@@ -95,8 +105,8 @@ impl Ingest {
             if cancel.is_cancelled() {
                 return Err(Error::Cancelled);
             }
-            let event =
-                log_core::parse::normalize(&bytes, &source, generation, stream, physical, observed);
+            let mut event = log_core::parse::normalize_with(&bytes, &source, generation, stream, physical, observed, &parser.profile);
+            parser.apply(&mut event);
             if cancel.is_cancelled() {
                 return Err(Error::Cancelled);
             }
@@ -314,6 +324,7 @@ impl EngineWorker {
             sender: tx,
             bytes: Arc::new(Semaphore::new(1024 * 1024)),
             cancel: self.cancel.clone(),
+            parser: Arc::new(std::sync::RwLock::new(Arc::new(parser::Parser::default()))),
         })
     }
     pub fn retire(&self, source: &str) -> Result<()> {

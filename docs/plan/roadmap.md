@@ -2,7 +2,7 @@
 
 **Mỗi phase một file plan, các tính năng bên trong đánh số `1.1`, `1.2`, `2.1`…** Khi giao code, chọn đúng một mục để giữ scope; roadmap chỉ dùng quản lý thứ tự và gate.
 
-Năm phase ban đầu giữ nguyên phạm vi và gates. Phase 6 là plan bổ sung từ research ngày20/11/2026, **chưa triển khai**; có thể bắt đầu từ prerequisite phase1–4 đã sẵn sàng, không bắt buộc chờ release phase5. Plan không đồng nghĩa thay đổi behavior/contract đã có.
+Năm phase ban đầu giữ nguyên phạm vi và gates. Phase6 bổ sung từ research ngày20/11/2026; **6.1 đã có schema/domain primitives và manual evidence ngày25/11/2026, các mục khác còn Planned**. Có thể bắt đầu từ prerequisite phase1–4 đã sẵn sàng, không bắt buộc chờ release phase5. Schema mới chưa được migrate vào ingestion runtime/wire.
 
 | Phase | Plan | Phạm vi |
 | --- | --- | --- |

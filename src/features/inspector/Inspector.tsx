@@ -12,7 +12,7 @@ export function Inspector({ sources, viewId, eventId, nextGeneration, close, sel
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState('');
-  const [tab, setTab] = useState<'fields' | 'raw' | 'stack'>('fields');
+  const [tab, setTab] = useState<'fields' | 'raw' | 'stack' | 'evidence' | 'bytes'>('fields');
   const active = useRef(0);
   const panel = useRef<HTMLElement>(null);
   const budget = useRef({ bytes: 0, nodes: 0 });
@@ -54,9 +54,11 @@ export function Inspector({ sources, viewId, eventId, nextGeneration, close, sel
   return <aside className="inspector" id="event-details-panel" ref={panel} tabIndex={-1} aria-label="Event Inspector" onKeyDown={e => { if (visible && e.key === 'Escape' && !document.querySelector('dialog[open]')) { e.stopPropagation(); close(); } }}>
     <div className="section-heading"><h2>Event details</h2><div className="inspector-header-actions"><button data-close-inspector onClick={close} aria-label="Close event details" title="Close details · Esc">×</button></div></div>
     <p className="hint">{eventId} · Local copy only</p>{error && <p role="alert" className="notice">{error}</p>}{busy && <p role="status">Loading bounded detail…</p>}
-    {detail && <><p className="hint">{detail.quality}</p><div className="inspector-tabs" aria-label="Event detail sections">{(['fields', 'raw', 'stack'] as const).map(value => <button key={value} aria-pressed={tab === value} onClick={() => setTab(value)}>{value === 'fields' ? 'Fields' : value === 'raw' ? 'Raw' : 'Stack'}</button>)}</div>
+    {detail && <><p className="hint">{detail.quality}</p><div className="inspector-tabs" aria-label="Event detail sections">{(['fields', 'raw', 'stack', 'evidence', 'bytes'] as const).map(value => <button key={value} aria-pressed={tab === value} onClick={() => setTab(value)}>{value === 'fields' ? 'Fields' : value === 'raw' ? 'Raw' : value === 'stack' ? 'Stack' : value === 'evidence' ? 'Why these fields?' : 'Original bytes'}</button>)}</div>
       <div className="inspector-content">{tab === 'fields' && <>{detail.json_error ? <p className="hint">{detail.json_error}</p> : renderBranch([])}</>}
-      {tab === 'raw' && <><div className="section-heading"><h3>Raw text</h3><button disabled={detail.raw === null} onClick={() => void copy(detail.raw ?? '', 'Raw text copied')}>Copy raw</button></div><pre className="raw-text">{detail.raw}</pre></>}
+      {tab === 'evidence' && <pre className="raw-text">{detail.evidence_json ? JSON.stringify(JSON.parse(detail.evidence_json), null, 2) : 'No provenance in this preview.'}</pre>}
+      {tab === 'bytes' && <><p className="hint">{detail.raw_bytes} original bytes including the known delimiter. Hex preview capped at 16 KiB; text copy can be lossy. Fragment neighbors may have expired.</p><pre className="raw-text">{detail.raw_hex ?? 'Not requested'}</pre></>}
+      {tab === 'raw'  && <><div className="section-heading"><h3>Raw text</h3><button disabled={detail.raw === null} onClick={() => void copy(detail.raw ?? '', 'Raw text copied')}>Copy raw</button></div><pre className="raw-text">{detail.raw}</pre></>}
       {tab === 'stack' && (detail.group_id ? <><h3>Stack group · retained parts</h3><p className="hint">Some parts may have expired from retention. {detail.group_parts_truncated ? 'Part list capped at 200.' : ''}</p><div className="stack-parts">{detail.group_parts.map((id, i) => <button key={id} disabled={id === eventId} onClick={() => select(id)}>Part {i + 1}</button>)}</div></> : <p className="hint">This event has no retained stack group.</p>)}</div>
       <div className="inspector-actions"><IncidentExport sources={sources} eventIds={[eventId]}/><ExplainError eventId={eventId} sources={sources}/></div>
     </>}{copied && <p role="status" className="hint">{copied}</p>}

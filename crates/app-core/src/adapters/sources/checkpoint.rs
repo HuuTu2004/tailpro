@@ -9,6 +9,13 @@ pub struct FileCheckpoint {
     pub inode: String,
     pub next_offset: String,
     pub guard: String,
+    #[serde(default)]
+    pub partial: Option<FilePartial>,
+}
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct FilePartial {
+    pub record: String,
+    pub next_payload: String,
 }
 #[derive(Clone, Debug)]
 pub enum Position {
@@ -51,7 +58,7 @@ impl Checkpoints {
         if self.pending.len() >= 256 {
             return Err(Error::Limit("256 outstanding physical records"));
         }
-        self.next += 1;
+        self.next = self.next.checked_add(1).ok_or(Error::Limit("physical sequence overflow"))?;
         self.pending.insert(
             self.next,
             Pending {
@@ -93,10 +100,10 @@ impl Checkpoints {
         }
         while self
             .pending
-            .get(&(self.committed + 1))
+            .get(&self.committed.saturating_add(1))
             .is_some_and(|p| p.committed)
         {
-            let p = self.pending.remove(&(self.committed + 1)).unwrap();
+            let p = self.pending.remove(&self.committed.saturating_add(1)).unwrap();
             self.committed = p.end;
             if !matches!(p.position, Position::Marker) {
                 self.position = Some(p.position);
@@ -122,6 +129,7 @@ impl Checkpoints {
     /// Uncommitted assemblies are replayed after reconnect; committed position survives.
     pub fn reconnect(&mut self) {
         self.pending.clear();
-        self.next = self.committed;
+        // Never reuse physical identities after a replay.
+        self.committed = self.next;
     }
 }

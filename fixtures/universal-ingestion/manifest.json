@@ -1,0 +1,239 @@
+{
+  "version": 1,
+  "seed": "deterministic-v1",
+  "cases": [
+    {
+      "id": "root-before-nested",
+      "input": "{\"level\":\"info\",\"payload\":{\"level\":\"error\"},\"msg\":\"root\"}",
+      "profile": {},
+      "expected": {
+        "level": "info",
+        "message": "root",
+        "time_ns": null
+      }
+    },
+    {
+      "id": "nested-before-root",
+      "input": "{\"payload\":{\"level\":\"error\"},\"msg\":\"root\",\"level\":\"info\"}",
+      "profile": {},
+      "expected": {
+        "level": "info",
+        "message": "root",
+        "time_ns": null
+      }
+    },
+    {
+      "id": "alias-priority",
+      "input": "{\"msg\":\"low\",\"message\":\"high\",\"lvl\":\"error\",\"level\":\"warn\"}",
+      "profile": {},
+      "expected": {
+        "level": "warn",
+        "message": "high",
+        "time_ns": null
+      }
+    },
+    {
+      "id": "duplicate",
+      "input": "{\"level\":\"info\",\"level\":\"error\",\"message\":\"first\"}",
+      "profile": {},
+      "expected": {
+        "level": "info",
+        "message": "first",
+        "time_ns": null
+      }
+    },
+    {
+      "id": "pino",
+      "input": "{\"time\":1795194001123,\"level\":50,\"msg\":\"Node request\"}",
+      "profile": {
+        "time_unit": "milliseconds",
+        "level_namespace": "pino"
+      },
+      "expected": {
+        "level": "error",
+        "message": "Node request",
+        "time_ns": "1795194001123000000"
+      }
+    },
+    {
+      "id": "zap-decimal",
+      "input": "{\"ts\":1795194001.123456789,\"level\":\"warn\",\"msg\":\"Go request\"}",
+      "profile": {
+        "time_unit": "seconds"
+      },
+      "expected": {
+        "level": "warn",
+        "message": "Go request",
+        "time_ns": "1795194001123456789"
+      }
+    },
+    {
+      "id": "ns-large",
+      "input": "{\"ts\":9007199254740993,\"message\":\"exact\"}",
+      "profile": {
+        "time_unit": "nanoseconds"
+      },
+      "expected": {
+        "level": "unknown",
+        "message": "exact",
+        "time_ns": "9007199254740993"
+      }
+    },
+    {
+      "id": "ambiguous-numeric",
+      "input": "{\"ts\":1795194001,\"level\":50,\"message\":\"unknown\"}",
+      "profile": {},
+      "expected": {
+        "level": "unknown",
+        "message": "unknown",
+        "time_ns": null
+      }
+    },
+    {
+      "id": "logfmt-quotes",
+      "input": "level=info msg=\"slow request \\\"quoted\\\"\" trace_id=req42 empty=",
+      "profile": {},
+      "expected": {
+        "level": "info",
+        "message": "slow request \"quoted\"",
+        "time_ns": null
+      }
+    },
+    {
+      "id": "logfmt-malformed",
+      "input": "level=error msg=\"valid\" broken",
+      "profile": {},
+      "expected": {
+        "level": "unknown",
+        "message": null,
+        "time_ns": null
+      }
+    },
+    {
+      "id": "json-malformed",
+      "input": "{\"level\":\"error\",\"msg\":\"prefix\",broken}",
+      "profile": {},
+      "expected": {
+        "level": "unknown",
+        "message": null,
+        "time_ns": null
+      }
+    },
+    {
+      "id": "ecs-nested",
+      "input": "{\"error\":{\"message\":\"fallback\"},\"message\":\"Python event\",\"http\":{\"response\":{\"status_code\":502}},\"level\":\"info\"}",
+      "profile": {},
+      "expected": {
+        "level": "info",
+        "message": "Python event",
+        "time_ns": null
+      }
+    },
+    {
+      "id": "kafka",
+      "input": "[2026-11-20 17:00:01,234] WARN Kafka controller",
+      "profile": {
+        "timezone_offset_minutes": 420
+      },
+      "expected": {
+        "level": "warn",
+        "message": null,
+        "time_ns": "1795168801234000000"
+      }
+    },
+    {
+      "id": "redis",
+      "input": "123:M 20 Nov 2026 17:00:01.123 # Redis warning",
+      "profile": {
+        "timezone_offset_minutes": 420
+      },
+      "expected": {
+        "level": "warn",
+        "message": null,
+        "time_ns": "1795168801123000000"
+      }
+    },
+    {
+      "id": "nginx",
+      "input": "127.0.0.1 - - [20/Nov/2026:17:00:01 +0700] \"GET /ERROR/502 HTTP/1.1\" 502 12",
+      "profile": {
+        "access_log": true
+      },
+      "expected": {
+        "level": "unknown",
+        "message": null,
+        "time_ns": "1795168801000000000"
+      }
+    },
+    {
+      "id": "negative-url",
+      "input": "https://example.invalid/ERROR/502 no error",
+      "profile": {},
+      "expected": {
+        "level": "unknown",
+        "message": null,
+        "time_ns": null
+      }
+    },
+    {
+      "id": "negative-symbol",
+      "input": "# unrelated issue 502",
+      "profile": {},
+      "expected": {
+        "level": "unknown",
+        "message": null,
+        "time_ns": null
+      }
+    },
+    {
+      "id": "missing-year",
+      "input": "Nov 20 17:00:01 server app message",
+      "profile": {},
+      "expected": {
+        "level": "unknown",
+        "message": null,
+        "time_ns": null
+      }
+    },
+    {
+      "id": "missing-timezone",
+      "input": "2026-11-20 17:00:01 INFO ambiguous timezone",
+      "profile": {},
+      "expected": {
+        "level": "unknown",
+        "message": null,
+        "time_ns": null
+      }
+    },
+    {
+      "id": "syslog",
+      "input": "<34>1 2026-11-20T17:00:01Z host app 1 - - syslog",
+      "profile": {},
+      "expected": {
+        "level": "error",
+        "message": null,
+        "time_ns": "1795194001000000000"
+      }
+    },
+    {
+      "id": "stderr-info",
+      "input": "INFO stderr is not a severity",
+      "profile": {},
+      "expected": {
+        "level": "info",
+        "message": null,
+        "time_ns": null
+      }
+    },
+    {
+      "id": "python-json",
+      "input": "{\"time\":\"2026-11-20T17:00:01Z\",\"level\":\"error\",\"message\":\"Python exception\",\"duration_ms\":-1}",
+      "profile": {},
+      "expected": {
+        "level": "error",
+        "message": "Python exception",
+        "time_ns": "1795194001000000000"
+      }
+    }
+  ]
+}

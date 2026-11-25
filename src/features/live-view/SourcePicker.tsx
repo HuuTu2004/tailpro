@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import type { AppStatus, SourceInfo } from '../../shared/contracts/generated';
 
 type Props = {
@@ -10,7 +10,7 @@ type Props = {
   addPath: (hostId: string, path: string, combine: boolean) => Promise<void>;
   manageSources: (hostId: string) => void;
 };
-const sourcePath = (source: SourceInfo) => source.spec.kind === 'file' ? source.spec.path : source.spec.kind === 'journal' ? source.spec.unit : source.spec.container_id;
+const sourcePath = (source: SourceInfo) => source.spec.kind === 'file' ? source.spec.path : source.spec.kind === 'journal' ? source.spec.unit : source.spec.kind === 'kubernetes' ? `${source.spec.namespace}/${source.spec.pod}/${source.spec.container}` : source.spec.container_id;
 
 export function SourcePicker({ status, scope, scopeHost, setScope, selectHost, addPath, manageSources }: Props) {
   const [combine, setCombine] = useState(false);
@@ -24,15 +24,16 @@ export function SourcePicker({ status, scope, scopeHost, setScope, selectHost, a
   const sources = status?.sources ?? [];
 
   function chooseSource(id: string) {
-    if (!combine || allHosts || scopeHost) { setScope([id]); return; }
+    if (!combine || allHosts) { setScope([id]); return; }
     // Keep the final source selected. Only All hosts clears the source filter.
-    setScope(scope.includes(id) ? scope.length > 1 ? scope.filter(selected => selected !== id) : scope : [...scope, id]);
+    const selected = scope.filter(sourceId => sources.some(source => source.id === sourceId));
+    setScope(selected.includes(id) ? selected.length > 1 ? selected.filter(sourceId => sourceId !== id) : selected : [...selected, id]);
   }
   function openPath(hostId: string) {
     setEditingHost(hostId); setPath(''); setError('');
     requestAnimationFrame(() => pathInput.current?.focus());
   }
-  async function submitPath(event: React.FormEvent) {
+  async function submitPath(event: FormEvent) {
     event.preventDefault();
     if (pending) return;
     setPending(true); setError('');
@@ -59,7 +60,7 @@ export function SourcePicker({ status, scope, scopeHost, setScope, selectHost, a
               <button className="source-tile source-tile-all" aria-pressed={hostAll} disabled={!hostSources.length} onClick={() => selectHost(host.id)} title={`View all logs from ${host.target}, including newly added sources`}>All <span>{hostSources.length}</span></button>
               {hostSources.map(source => {
                 const fullPath = sourcePath(source);
-                return <button key={source.id} className="source-tile" aria-pressed={!scopeHost && scope.includes(source.id)} onClick={() => chooseSource(source.id)} title={`${fullPath}\n${source.spec.kind} · ${source.state.replaceAll('_', ' ')}${source.detail ? '\n' + source.detail : ''}`}><span className={`source-state-dot ${/error|fail|needs_action|reconnect/i.test(source.state) ? 'attention' : source.state === 'streaming' ? 'reading' : ''}`} aria-hidden="true"/><span className="source-tile-name">{fullPath.split('/').filter(Boolean).at(-1) ?? fullPath}</span><small>{source.spec.kind === 'journal' ? 'Journal' : source.spec.kind === 'docker' ? 'Docker' : 'File'}</small></button>;
+                return <button key={source.id} className="source-tile" aria-pressed={scope.includes(source.id)} onClick={() => chooseSource(source.id)} title={`${fullPath}\n${source.spec.kind} · ${source.state.replaceAll('_', ' ')}${source.detail ? '\n' + source.detail : ''}`}><span className={`source-state-dot ${/error|fail|needs_action|reconnect/i.test(source.state) ? 'attention' : source.state === 'streaming' ? 'reading' : ''}`} aria-hidden="true"/><span className="source-tile-name">{fullPath.split('/').filter(Boolean).at(-1) ?? fullPath}</span><small>{source.spec.kind === 'journal' ? 'Journal' : source.spec.kind === 'docker' ? 'Docker' : source.spec.kind === 'kubernetes' ? 'Kubernetes' : 'File'}</small></button>;
               })}
               {!hostSources.length && <span className="source-row-empty">No log sources yet</span>}
             </div>

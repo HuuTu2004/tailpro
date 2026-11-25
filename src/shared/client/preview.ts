@@ -1,5 +1,5 @@
 // Development-only UI preview. Data commands never reach the real runtime.
-import type { AppStatus, HostProfile, ViewRow, ReadResponse, ExplainProvider } from '../contracts/generated';
+import type { AppStatus, HostProfile, ViewRow, ReadResponse, ExplainProvider, SourceSpec } from '../contracts/generated';
 
 const started = Date.now();
 const initialProfiles: HostProfile[] = [
@@ -36,7 +36,8 @@ function write(key: string, value: unknown) { localStorage.setItem('tailpro.prev
 const count = () => 240 + Math.min(1500, Math.floor((Date.now() - started) / 2000));
 function row(index: number): ViewRow {
   const source = ids[index % ids.length];
-  const host = initialProfiles[source === 'demo-nginx' ? 1 : 0];
+  const sourceInfo = status.sources.find(item => item.id === source);
+  const host = status.connections.find(connection => connection.host.id === sourceInfo?.host_id)?.host ?? initialProfiles[0];
   return {
     id: 'demo-event-' + index, source, server: host.target, environment: host.environment,
     level: index % 13 === 0 ? 'error' : index % 9 === 0 ? 'warn' : 'info',
@@ -70,7 +71,7 @@ function matches(event: ViewRow, query: string) {
 export async function previewInvoke(command: string, args: Record<string, unknown> = {}): Promise<unknown> {
   const request = (args.request ?? {}) as Record<string, unknown>;
   switch (command) {
-    case 'status': return status;
+    case 'status': return structuredClone(status);
     case 'saved_hosts': return read('profiles', initialProfiles);
     case 'save_host_profile': {
       const profile = args.profile as HostProfile;
@@ -98,10 +99,11 @@ export async function previewInvoke(command: string, args: Record<string, unknow
       const events = Array.from({ length: Math.min(last, 1900) }, (_, index) => row(index + 1)).filter(event => (!scope.length || scope.includes(event.source)) && matches(event, String(request.query ?? ''))).slice(-200);
       return { schema_version: 1, generation: request.generation, revision: String(count()), events, older_cursor: events[0]?.id ?? null, complete: true, truncated: false, anchor_expired: false, scanned: last, elapsed_us: '2400' };
     }
+    case 'preview_parser': case 'apply_parser': case 'ingestion_diagnostics': case 'inspect_kubernetes': throw new Error('This operation requires the native runtime; demo data is not an ingestion validation.');
     case 'event_detail': {
       const event = row(Number(String(request.event_id).replace('demo-event-', '')) || 1);
       const data = { message: event.message, level: event.level, trace_id: event.trace_id, duration_ms: event.duration_ms };
-      return { schema_version: 1, generation: request.generation, event_id: event.id, quality: 'Demo data', raw: request.include_raw ? JSON.stringify(data, null, 2) : null, nodes: Object.entries(data).map(([key, value], index) => ({ index, key, value: JSON.stringify(value), kind: typeof value === 'number' ? 'number' : 'string', truncated: false })), group_id: null, group_parts: [], group_parts_truncated: false, more: false, json_error: null };
+      return { schema_version: 1, generation: request.generation, event_id: event.id, quality: 'Demo data', raw_hex: null, raw_bytes: '0', evidence_json: '{}', raw: request.include_raw ? JSON.stringify(data, null, 2) : null, nodes: Object.entries(data).map(([key, value], index) => ({ index, key, value: JSON.stringify(value), kind: typeof value === 'number' ? 'number' : 'string', truncated: false })), group_id: null, group_parts: [], group_parts_truncated: false, more: false, json_error: null };
     }
     case 'saved_views': return read('views', [{ name: 'Errors only', query: 'level:error', sources: [] }, { name: 'Slow requests', query: 'duration>200ms', sources: [] }]);
     case 'save_view': write('views', [...read<Record<string, unknown>[]>('views', []).filter(view => view.name !== (args.view as Record<string, unknown>).name), args.view].slice(-32)); return;
@@ -110,7 +112,18 @@ export async function previewInvoke(command: string, args: Record<string, unknow
     case 'pin': return;
     case 'import_config': return { aliases: ['demo-api', 'demo-staging'], disclosures: ['Demo aliases only.'] };
     case 'complete': case 'discover': return { complete: true, reasons: [], candidates: [{ id: 'demo-candidate', path: '/var/log/app/api.log', provider: 'var_log', access: 'ready', activity: 'growing', provenance: 'Demo metadata', tags: ['api'], container_id: null, file_type: 'regular', confidence: 'declared', process_hint: null, identity: 'demo', host_id: args.hostId ?? request.host_id, size: '24576', mtime: String(started), observed_at_ms: String(started) }] };
-    case 'start_source': return status.sources[0].id;
+    case 'start_source': {
+      const host = status.connections.find(connection => connection.host.id === args.hostId);
+      if (host?.state !== 'connected') throw new Error('Connect this host first.');
+      const spec = args.spec as SourceSpec;
+      const existing = status.sources.find(source => source.host_id === args.hostId && JSON.stringify(source.spec) === JSON.stringify(spec));
+      if (existing) return existing.id;
+      if (status.sources.length >= 8) throw new Error('Source limit reached (8).');
+      const id = 'demo-added-' + crypto.randomUUID();
+      status.sources.push({ id, host_id: host.host.id, spec, state: 'streaming', detail: 'Sample logs · no remote file is read', generation: '1' });
+      ids.push(id);
+      return id;
+    }
     case 'stop_source': { const source = status.sources.find(source => source.id === args.sourceId); if (source) source.state = 'stopped'; return; }
     case 'service_mappings': return read('mappings', []);
     case 'save_service_mapping': write('mappings', [args.mapping]); return;
@@ -127,7 +140,7 @@ export async function previewInvoke(command: string, args: Record<string, unknow
     case 'topology_revision': return 'demo';
     case 'debug_read': {
       const events = [row(130), row(131), row(132)];
-      const result: ReadResponse = { schema_version: 2, sources: status.sources.map(source => { const host = status.connections.find(host => host.host.id === source.host_id)!.host; return { id: source.id, server: host.target, environment: host.environment, health: source.state }; }), events: events.map(event => ({ evidence_ref: event.id, source: event.source, server: event.server, environment: event.environment, level: event.level, text: event.message, observed_at_ms: event.time, event_time: null, redaction_incomplete: false, quality: 'Demo evidence' })), time_basis: 'local_observed_at', coverage: 'Demo retained evidence', complete: true, gaps: [], truncated: false, redaction_incomplete: false, next_cursor: null, observation_cursor: null, trace_ref: 'demo-trace', capabilities: [], candidates: [], ambiguous: false, clusters: [], timeline: events.map(event => ({ source: event.source, evidence_ref: event.id, observed_at_ms: event.time, event_time: null, duration_ms: event.duration_ms, semantics: 'Explicit demo duration' })), code_hints: [] };
+      const result: ReadResponse = { query_scanned: "3", query_matched_lower_bound: "3", query_returned: 3, schema_version: 2, sources: status.sources.map(source => { const host = status.connections.find(host => host.host.id === source.host_id)!.host; return { id: source.id, server: host.target, environment: host.environment, health: source.state }; }), events: events.map(event => ({ evidence_ref: event.id, source: event.source, server: event.server, environment: event.environment, level: event.level, text: event.message, observed_at_ms: event.time, event_time: null, transport_time: null, provenance: "Demo evidence", redaction_incomplete: false, quality: 'Demo evidence' })), time_basis: 'local_observed_at', coverage: 'Demo retained evidence', complete: true, gaps: [], truncated: false, redaction_incomplete: false, next_cursor: null, observation_cursor: null, trace_ref: 'demo-trace', capabilities: [], candidates: [], ambiguous: false, clusters: [], timeline: events.map(event => ({ source: event.source, evidence_ref: event.id, observed_at_ms: event.time, event_time: null, duration_ms: event.duration_ms, semantics: 'Explicit demo duration' })), code_hints: [] };
       return result;
     }
     default: throw new Error('This action is unavailable in demo preview.');

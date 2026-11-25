@@ -79,6 +79,8 @@ Phase 1 chỉ tạo hai library lõi và desktop; phase 3 mới extract DTO sang
 
 ## Ownership và Interface
 
+Phase6.1 có [`log-core/model/ingestion.rs`](../../crates/log-core/src/model/ingestion.rs) làm checked domain primitives cho [schema v1](ingestion-schema.md). Các view borrow bytes/decimal timestamps, không thêm per-event allocations hoặc I/O; admission `Disposition` dùng chung model/engine qua re-export tương thích. Đây là foundation, chưa thay runtime representation hoặc desktop/MCP wire; ownership/charging khi migrate theo schema contract và6.2–6.3.
+
 | Module | Sở hữu | Callers biết |
 | --- | --- | --- |
 | log-core | Parser/store/query, byte accounting, IDs | `append(batch)`, `snapshot(&mut owner)`, `inspect(id)`, query compile/execute |
@@ -134,6 +136,8 @@ Unused reservations không được hot source/background mượn. Evict excess 
 UI có reserved CPU/memory nhưng không vô hạn: supersede/release generations cũ trước query mới, round-robin giữa views. GUI heap/allocator không hard-cap được bằng logical bytes; RSS và failure behavior phải đo theo [plan](../plan/roadmap.md).
 
 ## Chính sách mở rộng feature
+
+Viewer chọn nguồn qua `SourcePicker`: mỗi host có một hàng ô nguồn, All tổng hợp theo host, Combine sources chọn nhiều nguồn để gộp vào cùng paged view. App giữ riêng host scope và danh sách source IDs tường minh; host scope cập nhật khi status có nguồn mới, còn đổi scope trong lúc Start đang chạy ngăn kết quả Start ghi đè lựa chọn mới. Add path gọi existing typed `start_source` sau Start & view, không thêm remote command hoặc quyền discovery; Discover sources chỉ mở đúng host/tab, người dùng vẫn phải bấm Discover. Columns và source health nằm ngoài các ô chọn nguồn. Layout cho phép bảng và scrollbar co theo chiều cao cửa sổ; danh sách host có vùng cuộn riêng.
 
 Desktop dùng một runtime cho cửa sổ log chính và các cửa sổ hệ điều hành độc lập `connections-manager`, `settings-manager`, `connection-editor`. Mỗi cửa sổ có decorations, move/resize/minimize/maximize/close của hệ điều hành; New connection không còn là HTML dialog. Mỗi nút chỉ mở hoặc focus đúng cửa sổ của chức năng đó; không gộp hai chức năng vào một window. Trang chính chỉ có mục Connections; form, Settings và thông tin SSH nâng cao không xếp trên bảng log. Cửa sổ quản lý mở qua native command với route/label allowlist, không cấp quyền tạo webview hoặc mở URL tùy ý từ frontend. Export/Explain vẫn thuộc cửa sổ chính; grants/provider/mappings cho phép thêm đúng Settings window, còn test/save profile thuộc Connections/New connection windows. Save gửi thông báo cập nhật danh sách profile và đóng editor; Cancel/OS close hủy test và bỏ bản nháp. Đóng cửa sổ quản lý không disconnect hoặc Stop nguồn.
 

@@ -95,3 +95,30 @@ pub fn kind(raw: &str) -> &'static str {
         _ => "number",
     }
 }
+
+struct Named<'a> { name:&'a str }
+impl<'de> Visitor<'de> for Named<'_> {
+    type Value=Option<&'de RawValue>;
+    fn expecting(&self,f:&mut fmt::Formatter)->fmt::Result{f.write_str("attribute object")}
+    fn visit_map<A:MapAccess<'de>>(self,mut map:A)->Result<Self::Value,A::Error>{
+        let mut found=None;
+        while let Some(key)=map.next_key::<String>()? {let value=map.next_value::<&'de RawValue>()?;if key==self.name&&found.is_none(){found=Some(value);}}
+        Ok(found)
+    }
+}
+/// Explicit dot path, first duplicate wins, at most 16 path components; no DOM retained.
+pub fn attribute(raw:&str,path:&str)->Option<String> {
+    if path.len()>128||path.split('.').count()>16{return None;}
+    if !raw.trim_start().starts_with('{') {
+        let mut found=None;
+        crate::parse::decode::pairs(raw,|key,value|{if key==path&&found.is_none(){found=Some(value.into_owned());}}).ok()?;
+        return found;
+    }
+    let mut selected=raw;
+    for name in path.split('.') {
+        if name.is_empty(){return None;}
+        let mut decoder=serde_json::Deserializer::from_str(selected);
+        selected=de::Deserializer::deserialize_map(&mut decoder,Named{name}).ok()??.get();
+    }
+    match selected.as_bytes().first() {Some(b'"')=>serde_json::from_str(selected).ok(),Some(b'{'|b'[')=>None,_=>Some(selected.into())}
+}

@@ -184,20 +184,28 @@ pub fn sanitize(input: &str) -> Sanitized {
 }
 /// Predicates only see this event. Never scan the original event before projection.
 pub fn project(event: &Event) -> (Event, bool) {
-    let safe = sanitize(&event.raw);
-    let mut projected = log_core::parse::normalize(
+    let safe = if event.fragment.is_some() || event.quality.incomplete || event.quality.continuation || event.quality.lossy_utf8 { masked() } else { sanitize(&event.raw) };
+    let profile=log_core::parse::decode::ParseProfile {time_unit:event.evidence.epoch_unit,level_namespace:Some(event.evidence.severity_namespace),..Default::default()};
+    let mut projected = log_core::parse::normalize_with(
         safe.text.as_bytes(),
         &event.source,
         0,
         event.stream,
         0,
         event.observed_at_ms.parse().unwrap_or(0),
+        &profile,
     );
+    projected.transport_time=event.transport_time.clone();
+    projected.quality.uncertain=event.quality.uncertain;
+    projected.quality.replay_suspected=event.quality.replay_suspected;
+    projected.quality.fragmented=event.quality.fragmented;
+    projected.quality.incomplete=event.quality.incomplete||safe.incomplete;
+    projected.quality.continuation=event.quality.continuation;
     if event.stream == log_core::model::Stream::Journal {
-        if projected.level == log_core::model::Level::Unknown {
+        if !safe.incomplete && projected.level == log_core::model::Level::Unknown && event.evidence.severity_namespace == log_core::model::ingestion::SeverityNamespace::Syslog {
             projected.level = event.level;
         }
-        projected.event_time = event.event_time.as_ref().map(|t| sanitize(t).text);
+
     }
     projected.sequence = event.sequence;
     projected.generation = event.generation.clone();

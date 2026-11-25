@@ -66,6 +66,8 @@ Tag nginx/postgres/app/worker theo evidence/path, cho user sửa. Lưu tối đa
 
 ## Ingestion và event
 
+Schema nền phase6.1 đã chốt tại [ingestion schema v1](ingestion-schema.md): identity/raw ranges, ba clock, numeric severity namespace, field provenance, terminal admission units và capability matrix. `model::ingestion` có checked borrowed primitives; engine reuse `Disposition` qua public path cũ. Schema này chưa migrate `Event`/readers/wire; đoạn dưới vẫn mô tả runtime legacy, không claim original-byte fidelity hoặc clock separation đã chạy. Acceptance ở [phase6](../process/phase-06-acceptance.md); migration theo6.2–6.3 và publication theo6.8.
+
 Physical record position → bounded sanitizer/framing → parse/level → per-source multiline → normalized event → admission/disposition ACK. JSON strings sanitize cả sau unescape. Raw giữ bounded để Inspector escape khi render; không replay ANSI/HTML/URL commands.
 
 Frame≤256KiB, depth≤64; selective visitor, không eager Value/tree mỗi record. Canonical buffers/extracted metadata có work/allocation cap; malformed/oversize fallback text/flags rõ. Inspector lazy≤4096 nodes,≤200 children/expand trong UI budget. Numeric time/duration phải có unit/profile; giữ event_time và local observed_at cùng quality, không đoán causal order giữa servers.

@@ -4,7 +4,7 @@ use crate::{
     api::{Error, Result},
 };
 use log_core::{
-    model::{Level, Stream},
+    model::{Fragment, Level, Stream},
     parse::Assembler,
 };
 use serde_json::Value;
@@ -33,10 +33,11 @@ pub(super) async fn read(
     let mut tick = tokio::time::interval(Duration::from_millis(25));
     let mut line = Vec::new();
     let mut opened = false;
+    let mut parent: Option<(String,u64)> = None;
     let deadline = Instant::now() + Duration::from_secs(4);
     let result = async {
         loop {
-            let mut limited = (&mut output).take((256 * 1024 + 1 - line.len()) as u64);
+            let mut limited = (&mut output).take((4096 + 1 - line.len()) as u64);
             tokio::select! {
                 _ = reader.cancel.cancelled() => break,
                 _ = session.cancel.cancelled() => return Err(Error::Cancelled),
@@ -49,7 +50,7 @@ pub(super) async fn read(
                     if n? == 0 { return Err(Error::NeedsAction("Journal helper ended; verify Python 3, journalctl and journal access".into())); }
                 }
             }
-            if line.len() > 256 * 1024 || line.last() != Some(&b'\n') { return Err(Error::Limit("Journal framing")); }
+            if line.len() > 4096 || line.last() != Some(&b'\n') { return Err(Error::Limit("Journal framing")); }
             let v: Value = serde_json::from_slice(&line)?;
             line.clear();
             match v["kind"].as_str().unwrap_or("") {
@@ -61,22 +62,36 @@ pub(super) async fn read(
                 "gap" => { reader.admit(assembler.flush(Instant::now()), cp).await?; reader.marker("Journal cursor invalid/vacuumed; bounded recent fallback; gap", cp).await?; }
                 "unsupported" => return Err(Error::NeedsAction("Unsupported host: journalctl unavailable".into())),
                 "unavailable" => return Err(Error::NeedsAction("Journal unavailable; verify unit/journal permissions".into())),
-                "record" => {
+                "message_part" => {
                     if cp.pending_len() >= 192 { reader.admit(assembler.flush(Instant::now()), cp).await?; }
                     let cursor = v["cursor"].as_str().filter(|s| !s.is_empty() && s.len() <= 2048).ok_or_else(|| Error::Invalid("Journal cursor".into()))?;
-                    let message = v["message"].as_str().ok_or_else(|| Error::Invalid("Journal message".into()))?;
-                    let physical = cp.allocate(Position::Journal(cursor.into()))?;
-                    let mut e = reader.ingest.normalize(message.as_bytes().to_vec(), Stream::Journal, physical, &reader.cancel).await?;
+                    let start = v["start"].as_str().and_then(|s|s.parse::<u64>().ok()).ok_or_else(||Error::Invalid("Journal part offset".into()))?;
+                    let length = v["length"].as_u64().filter(|n|*n<=64*1024).ok_or(Error::Limit("Journal payload part"))? as usize;
+                    let index = v["index"].as_u64().filter(|n|*n<32).ok_or(Error::Limit("Journal repeated values"))?;
+                    let physical = if start==0&&index==0 {
+                        if parent.is_some() {return Err(Error::Invalid("incomplete Journal entry".into()));}
+                        let physical=cp.allocate(Position::Journal(cursor.into()))?;parent=Some((cursor.into(),physical));physical
+                    } else { parent.as_ref().filter(|(c,_)|c==cursor).ok_or_else(||Error::Invalid("orphan Journal part".into()))?.1 };
+                    let mut bytes=vec![0;length];
+                    tokio::select! {_=reader.cancel.cancelled()=>return Err(Error::Cancelled),_=session.cancel.cancelled()=>return Err(Error::Cancelled),r=output.read_exact(&mut bytes)=>{r?;}}
+                    let fragmented=v["fragmented"].as_bool().unwrap_or(true);
+                    let mut e=if fragmented {reader.ingest.raw(bytes,Stream::Journal,physical)} else {reader.ingest.normalize(bytes,Stream::Journal,physical,&reader.cancel).await?};
+                    e.checkpoint_complete=v["complete"].as_bool().unwrap_or(false);
+                    if fragmented {e.fragment=Some(Fragment{record:physical.checked_mul(32).and_then(|n|n.checked_add(index)).ok_or(Error::Limit("Journal identity overflow"))?,start,end:start.checked_add(length as u64).ok_or(Error::Limit("Journal part overflow"))?,final_part:v["final"].as_bool().unwrap_or(false)});e.quality.fragmented=true;}
                     if e.level == Level::Unknown {
+                        e.evidence.severity_namespace=log_core::model::ingestion::SeverityNamespace::Syslog;
+                        e.evidence.severity_origin=log_core::model::ingestion::FieldOrigin::Explicit;
+                        e.evidence.severity_literal=v["priority"].as_str().map(str::to_owned);
                         e.level = match v["priority"].as_str() { Some("0" | "1" | "2" | "3") => Level::Error, Some("4") => Level::Warn, Some("5" | "6") => Level::Info, Some("7") => Level::Debug, _ => Level::Unknown };
                     }
-                    e.quality.uncertain |= v["uncertain"].as_bool().unwrap_or(true);
                     if let Some(us) = v["time_us"].as_str().and_then(|s| s.parse::<i128>().ok())
                         && let Some(ns) = us.checked_mul(1000)
                         && let Ok(t) = time::OffsetDateTime::from_unix_timestamp_nanos(ns) {
-                        e.event_time = t.format(&time::format_description::well_known::Rfc3339).ok();
+                        e.transport_time = t.format(&time::format_description::well_known::Rfc3339).ok();
                     }
+                    let complete=e.checkpoint_complete;
                     reader.admit(assembler.push(e, Instant::now()), cp).await?;
+                    if complete {parent=None;}
                 }
                 _ => return Err(Error::Invalid("Journal protocol".into())),
             }

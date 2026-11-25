@@ -25,6 +25,7 @@ def guard(fd, offset):
     return os.pread(fd, min(64, offset), max(0, offset-64)).hex()
 fd, s = opened()
 offset = 0
+partial = None
 checkpoint = p.get('checkpoint')
 generation = int(checkpoint['generation']) if checkpoint else 0
 if checkpoint:
@@ -32,6 +33,7 @@ if checkpoint:
     wanted = int(checkpoint['next_offset'])
     if same and wanted <= s.st_size and guard(fd, wanted) == checkpoint['guard']:
         offset = wanted
+        partial = checkpoint.get('partial')
         emit({'kind':'resume', 'offset':str(offset), 'device':str(s.st_dev), 'inode':str(s.st_ino)})
     else:
         generation += 1
@@ -44,7 +46,7 @@ else:
         newline = prefix.find(b'\n')
         offset = offset + newline + 1 if newline >= 0 else s.st_size
         emit({'kind':'recent_window', 'uncertain':True})
-emit({'kind':'opened', 'device':str(s.st_dev), 'inode':str(s.st_ino), 'offset':str(offset), 'guard':guard(fd, offset)})
+emit({'kind':'opened', 'device':str(s.st_dev), 'inode':str(s.st_ino), 'offset':str(offset), 'guard':guard(fd, offset), 'partial':partial})
 last_guard = guard(fd, offset)
 while True:
     current = os.fstat(fd)

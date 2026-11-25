@@ -5,6 +5,7 @@ mod explainer;
 mod output;
 pub mod policy;
 mod production;
+mod parsing;
 pub mod redaction;
 mod topology;
 mod views;
@@ -42,6 +43,7 @@ struct Host {
     completion: Option<CancellationToken>,
 }
 struct Source {
+    parser: Arc<std::sync::RwLock<Arc<crate::workers::parser::Parser>>>,
     info: Arc<Mutex<SourceInfo>>,
     cancel: CancellationToken,
     task: tokio::task::JoinHandle<()>,
@@ -258,6 +260,13 @@ impl AppHandle {
             }
             SourceSpec::File { path } => policy::path(path)?,
             SourceSpec::Journal { unit } => policy::unit(unit)?,
+            SourceSpec::Kubernetes { kubeconfig, context,namespace,pod,pod_uid,container,container_id,config_digest,trusted,.. } => {
+                policy::path(kubeconfig)?;
+                for value in [context,namespace,pod,pod_uid,container,container_id] {
+                    if value.is_empty()||value.len()>253||value.starts_with('-')||value.chars().any(|c|c.is_whitespace()||c.is_control()) {return Err(Error::Invalid("Invalid Kubernetes selected identity".into()));}
+                }
+                if !trusted||config_digest.len()!=64||!config_digest.bytes().all(|b|b.is_ascii_hexdigit()){return Err(Error::NeedsAction("Inspect and trust the selected Kubernetes context first".into()));}
+            },
         }
         let (sessions, cancel, profile) = {
             let mut state = self.state.lock().unwrap();
@@ -294,6 +303,7 @@ impl AppHandle {
             detail: None,
             generation: generation.to_string(),
         }));
+        let parser=ingest.parser.clone();
         let reader = Reader {
             source: id.clone(),
             generation,
@@ -319,7 +329,7 @@ impl AppHandle {
             .lock()
             .unwrap()
             .sources
-            .insert(id.clone(), Source { info, cancel, task });
+            .insert(id.clone(), Source { info, cancel, task, parser });
         Ok(id)
     }
     pub async fn stop_source(&self, source_id: &str) -> Result<()> {

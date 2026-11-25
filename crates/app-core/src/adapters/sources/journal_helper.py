@@ -21,7 +21,7 @@ def stop(*_):
 signal.signal(signal.SIGTERM, stop)
 signal.signal(signal.SIGHUP, stop)
 base = ['journalctl', '--system', '--no-pager', '--output=json',
-        '--output-fields=MESSAGE,PRIORITY,_TRANSPORT', '--unit='+p['unit']]
+        '--all', '--output-fields=MESSAGE,PRIORITY,_TRANSPORT', '--unit='+p['unit']]
 
 def launch(extra):
     global child
@@ -71,13 +71,24 @@ try:
     for item in lines(sel):
         cursor = item.get('__CURSOR')
         if not isinstance(cursor, str) or len(cursor) > 2048: raise ValueError()
-        message = item.get('MESSAGE')
-        if not isinstance(message, str):
-            send({'kind':'record', 'cursor':cursor, 'message':'[unsupported binary or repeated Journal MESSAGE]', 'uncertain':True})
-        else:
-            send({'kind':'record', 'cursor':cursor, 'message':message,
-                  'time_us':item.get('__REALTIME_TIMESTAMP'), 'priority':item.get('PRIORITY'),
-                  'uncertain':False})
+        message = item.get('MESSAGE', '')
+        binary = isinstance(message, list) and all(type(v) is int and 0 <= v <= 255 for v in message)
+        messages = [message] if isinstance(message, str) or binary else message
+        if not isinstance(messages, list) or len(messages) > 32: raise ValueError()
+        if not messages: messages = ['']
+        for index, value in enumerate(messages):
+            if isinstance(value, str): data = value.encode('utf-8')
+            elif isinstance(value, list) and all(type(v) is int and 0 <= v <= 255 for v in value): data = bytes(value)
+            else: raise ValueError()
+            for start in range(0, max(1, len(data)), 64*1024):
+                part = data[start:start+64*1024]
+                final = start + len(part) == len(data)
+                send({'kind':'message_part', 'cursor':cursor, 'length':len(part),
+                      'index':index, 'count':len(messages), 'start':str(start),
+                      'final':final, 'complete':final and index+1==len(messages),
+                      'fragmented':len(data)>64*1024 or len(messages)>1,
+                      'time_us':item.get('__REALTIME_TIMESTAMP'), 'priority':item.get('PRIORITY')})
+                sys.stdout.buffer.write(part); sys.stdout.buffer.flush()
     send({'kind':'unavailable', 'status':'journal ended; check journalctl/systemd/permissions'})
 except FileNotFoundError:
     send({'kind':'unsupported', 'status':'journalctl unavailable; Python 3 and systemd journal required'})

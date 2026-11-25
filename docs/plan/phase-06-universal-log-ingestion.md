@@ -1,10 +1,10 @@
 # Phase 6 — Universal log ingestion, continuity và tối ưu có số đo
 
-**Trạng thái: DESIGN / CHƯA TRIỂN KHAI.** Lập ngày 20/11/2026, Asia/Bangkok. Đây là plan bổ sung theo yêu cầu research; số thứ tự 6 không bắt buộc chờ phát hành phase 5 mới bắt đầu. Không thay các runtime gates chưa đạt của phase 1–4.
+**Trạng thái: 6.1 đã chốt schema và có checked domain primitives; 6.2–6.12 chưa triển khai.** Lập ngày20/11/2026, cập nhật25/11/2026, Asia/Bangkok. [Schema v1](../system-design/ingestion-schema.md) và [acceptance6.1](../process/phase-06-acceptance.md) phân biệt foundations với runtime legacy. Số thứ tự6 không bắt buộc chờ phát hành phase5 mới bắt đầu; không thay các runtime gates chưa đạt của phase1–4.
 
 **Kết quả cần đạt:** Một pipeline dùng chung đọc được log của Go/Rust/Node/Java/Python/PHP, Redis/Kafka/Nginx qua các nguồn được hỗ trợ; thêm format bằng cấu hình nhỏ; luôn giữ bằng chứng về nội dung, cách suy luận và khoảng thiếu. Tối ưu tổng chi phí đọc → parse → giữ → query → UI/MCP trên cùng workload.
 
-**Cơ sở:** [Research nguồn chính thức](../system-design/universal-log-ingestion-research.md), [architecture](../system-design/architecture.md), [contracts](../system-design/contracts.md), [current status](../process/current-status.md). Những quyết định dưới đây là **thiết kế đề xuất**; cấu trúc mới chỉ trở thành contract hiện hành khi triển khai mục tương ứng và cập nhật tài liệu chuẩn.
+**Cơ sở:** [Research nguồn chính thức](../system-design/universal-log-ingestion-research.md), [architecture](../system-design/architecture.md), [contracts](../system-design/contracts.md), [current status](../process/current-status.md). Schema6.1 đã được chốt; các hành vi6.2–6.12 dưới đây còn là **thiết kế đề xuất** cho implementation tiếp theo.
 
 ## 1. Quyết định kiến trúc
 
@@ -64,7 +64,7 @@ Kubernetes không được coi là “chỉ thay `docker` bằng `kubectl`”. S
 
 ### 4.1 — Dữ liệu nội bộ gọn, DTO chỉ tạo khi cần
 
-Đây là schema ngữ nghĩa; chưa quyết định layout Rust cuối cùng trước 6.1/6.10.
+Schema ngữ nghĩa đã chốt ở [6.1](../system-design/ingestion-schema.md); layout retained Event sẽ migrate ở6.2–6.3 và chỉ tối ưu sau số đo6.10.
 
 | Nhóm | Dữ liệu đề xuất | Quy tắc |
 | --- | --- | --- |
@@ -284,7 +284,7 @@ Tối ưu search không được dùng raw-secret prefilter để thay predicate
 
 ## 9. Các mục triển khai và dependency
 
-Chỉ code mục được chọn. Tất cả mục dưới đây hiện **Planned**. Tài liệu này không tạo automated tests/framework; dùng acceptance thủ công, examples/profiling hiện có, scoped build/lint/typecheck theo AGENTS.md.
+Chỉ code mục được chọn. **6.1: contract chốt / primitives build và manual observed**; các mục còn lại **Planned**. Không tạo automated tests/framework; dùng acceptance thủ công, examples/profiling, scoped build/lint/typecheck theo AGENTS.md. Contract accepted không đồng nghĩa runtime parser đã migrate.
 
 | ID | Ưu tiên / dependency | Đầu ra và code sở hữu | Gate hoàn thành |
 | --- | --- | --- | --- |
@@ -338,7 +338,7 @@ Giả thuyết tối ưu chỉ được nhận khi output/coverage/gaps không x
 
 Workflow cho từng item: **Planned → Implementing → Build checked → Manual observed → Runtime accepted**. `Blocked` phải ghi prerequisite/evidence cụ thể; `Partial` giữ danh sách case chưa chạy. Không đổi trạng thái vì có file code hoặc benchmark đẹp.
 
-Khi bắt đầu triển khai, cập nhật bảng từng6.x trong `docs/process/current-status.md` và thêm acceptance note theo convention `docs/process/phase-06-acceptance.md`. Chưa tạo file evidence chứa kết quả giả trong đợt research này. Mỗi observation ghi:
+Theo dõi từng6.x tại [current status](../process/current-status.md) và [acceptance phase6](../process/phase-06-acceptance.md). Đã ghi evidence foundations6.1 ngày25/11/2026; các gate chưa chạy giữ Planned/Unrun. Mỗi observation ghi:
 
 ```text
 item_id / evidence_id / date_timezone / git_revision + dirty_state
@@ -356,4 +356,4 @@ raw_reconstruction_or_disposition / known_limits / next_action
 
 Rollback theo source: tắt rule/profile mới hoặc dùng raw-only; engine/decoder revisions phải nhất quán, flush generation khi đổi. Raw-only vẫn tôn trọng admission/retention/policy và báo structured fields unavailable; không che lỗi transport.
 
-**Bước code đề xuất tiếp theo: 6.1.** Nó chốt ranh giới raw/time/ACK và baseline metrics trước khi mở rộng decoder, tránh làm lại DTO, checkpoint, search và Inspector nhiều lần.
+**Bước code đề xuất tiếp theo: 6.2.** Schema6.1 đã chốt ranh giới raw/time/ACK; bước6.2 migrate raw/fragments và giữ redaction/checkpoint contract trước khi mở rộng decoder.

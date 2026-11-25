@@ -1,12 +1,13 @@
 import { IncidentExport } from '../export/IncidentExport';
-import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from 'react';
 import { native } from '../../shared/client/native';
 import type { AppStatus, ViewNotice, ViewPage, ViewRow } from '../../shared/contracts/generated';
 import { QueryBar } from '../query/QueryBar';
 import { Inspector } from '../inspector/Inspector';
 import { ResizableViewer } from './ResizableViewer';
+import { SourcePicker } from './SourcePicker';
 import './workspace.css';
-type Props = { onGetStarted?: () => void; status?: AppStatus; scope: string[]; setScope: (ids: string[]) => void; queryInput: RefObject<HTMLInputElement | null>; viewport: RefObject<HTMLDivElement | null>; active?: boolean; onInspect?: () => void; inspectorVisible?: boolean };
+type Props = { onGetStarted?: () => void; status?: AppStatus; scope: string[]; setScope: (ids: string[]) => void; scopeHost: string | null; selectHostLogs: (hostId: string) => void; addLogPath: (hostId: string, path: string, combine: boolean) => Promise<void>; manageSources: (hostId: string) => void; queryInput: RefObject<HTMLInputElement | null>; viewport: RefObject<HTMLDivElement | null>; active?: boolean; onInspect?: () => void; inspectorVisible?: boolean };
 const HEIGHT = 36;
 const columns = ['time', 'server', 'source', 'level', 'message', 'trace_id', 'duration_ms'] as const;
 type Column = typeof columns[number];
@@ -23,7 +24,7 @@ function messageWidth(page: ViewPage) {
   return width;
 }
 function bytes(page: ViewPage) { const cached = pageSizes.get(page); if (cached !== undefined) return cached; const size = JSON.stringify(page).length * 2 + page.events.length * 512; pageSizes.set(page, size); return size; }
-export function LiveView({ onGetStarted, status, scope, setScope, queryInput, viewport, active = true, onInspect, inspectorVisible = true }: Props) {
+export function LiveView({ onGetStarted, status, scope, setScope, scopeHost, selectHostLogs, addLogPath, manageSources, queryInput, viewport, active = true, onInspect, inspectorVisible = true }: Props) {
   const [viewId, setViewId] = useState('');
   const [session, setSession] = useState(0);
   const [query, setQuery] = useState('');
@@ -36,8 +37,8 @@ export function LiveView({ onGetStarted, status, scope, setScope, queryInput, vi
   const [busy, setBusy] = useState(false);
   const [selection, setSelection] = useState('');
   const [activeRow, setActiveRow] = useState('');
-  const [verticalGutter, setVerticalGutter] = useState(0);
-  const horizontal = useRef<HTMLDivElement>(null);
+  const [viewportWidth, setViewportWidth] = useState(0);
+  const [horizontalScroll, setHorizontalScroll] = useState(0);
   const [scroll, setScroll] = useState(0);
   const [visibleHeight, setVisibleHeight] = useState(432);
   const [shown, setShown] = useState<Column[]>(['time', 'server', 'source', 'level', 'message']);
@@ -58,10 +59,11 @@ export function LiveView({ onGetStarted, status, scope, setScope, queryInput, vi
   const current = useRef({ query, scope, viewId }); current.current = { query, scope, viewId };
   const fetchRef = useRef<(kind?: 'reset' | 'older' | 'verify') => Promise<void>>(async () => {});
   const configKey = JSON.stringify(scope);
+  useEffect(() => { setSelection(''); setActiveRow(''); }, [configKey]);
   const nextDetail = useCallback(() => ++detailGeneration.current, []);
   const rowName = (row: ViewRow) => {
     const source = status?.sources.find(s => s.id === row.source);
-    return source ? source.spec.kind === 'file' ? source.spec.path : source.spec.kind === 'journal' ? source.spec.unit : source.spec.container_id : row.source;
+    return source ? source.spec.kind === 'file' ? source.spec.path : source.spec.kind === 'journal' ? source.spec.unit : source.spec.kind === 'kubernetes' ? `${source.spec.namespace}/${source.spec.pod}/${source.spec.container}` : source.spec.container_id : row.source;
   };
   const environmentFor = (row: ViewRow) => { const source = status?.sources.find(s => s.id === row.source); return status?.connections.find(c => c.host.id === source?.host_id)?.host.environment ?? row.environment; };
   function rememberReadingAnchor(scrollTop: number) {
@@ -154,7 +156,7 @@ export function LiveView({ onGetStarted, status, scope, setScope, queryInput, vi
   }, [query, configKey, viewId]);
   useEffect(() => {
     if (!viewport.current) return;
-    const observer = new ResizeObserver(entries => { setVisibleHeight(entries[0].contentRect.height); const node = viewport.current; if (node) setVerticalGutter(node.offsetWidth - node.clientWidth); }); observer.observe(viewport.current);
+    const observer = new ResizeObserver(entries => { setVisibleHeight(entries[0].contentRect.height); const node = viewport.current; if (node) setViewportWidth(node.clientWidth); }); observer.observe(viewport.current);
     return () => observer.disconnect();
   }, []);
   useEffect(() => {
@@ -171,6 +173,8 @@ export function LiveView({ onGetStarted, status, scope, setScope, queryInput, vi
   const columnWidths: Record<Column, string> = { time: '148px', server: '130px', source: '160px', level: '80px', message: `minmax(${longestMessage}px, 1fr)`, trace_id: '170px', duration_ms: '105px' };
   const grid = shown.map(c => columnWidths[c]).join(' ');
   const tableMinWidth = shown.reduce((width, column) => width + (column === 'message' ? longestMessage : parseInt(columnWidths[column])), 0);
+  const horizontalMax = Math.max(0, tableMinWidth - viewportWidth);
+  const scrollThumbWidth = `${Math.min(100, viewportWidth / Math.max(tableMinWidth, 1) * 100)}%`;
   const sortedFrames = [...metrics.frames].sort((a, b) => a - b);
   const frame95 = sortedFrames[Math.floor(sortedFrames.length * .95)] ?? 0;
   const closeInspector = useCallback(() => { setSelection(''); viewport.current?.focus(); }, [viewport]);
@@ -182,15 +186,16 @@ export function LiveView({ onGetStarted, status, scope, setScope, queryInput, vi
   return <section className="live-view" aria-label="Multi-source live logs">
     <div className="viewer-toolbar"><div className="section-heading log-toolbar"><h2>Live logs <span className={`badge ${paused ? 'paused' : 'following'}`}>{!status?.sources.length ? 'Ready' : paused ? 'Paused' : 'Live'}</span></h2><div className="actions"><button disabled={!viewId} title={paused ? 'Resume live' : 'Pause viewport · Space'} onClick={() => paused ? resume() : pause()}>{paused ? `Resume · ${arrivals} new` : 'Pause'}</button>{paused && <button disabled={!viewId} onClick={resume}>Jump to live</button>}<button disabled={!activeRow} aria-expanded={Boolean(selection && inspectorVisible)} aria-controls="event-details-panel" onClick={() => { if (selection && inspectorVisible) closeInspector(); else { pause(); onInspect?.(); setSelection(activeRow); } }}>{selection && inspectorVisible ? 'Hide details' : 'Details'}</button><IncidentExport sources={scope.length ? scope : status?.sources.map(s => s.id) ?? []} query={query}/></div></div>
     <QueryBar value={query} change={value => { if (value !== query) { epoch.current++; generation.current++; setQuery(value); } }} input={queryInput}/></div>
-    <div className="view-context-row"><details className="view-options"><summary>Sources & columns <span className="subtle">· {scope.length ? `${scope.length} selected` : 'All retained'}</span></summary><div className="view-option-content"><h3>Source scope</h3><div className="check-row"><button onClick={() => setScope([])}>All retained sources</button>{status?.sources.map(s => { const host = status.connections.find(c => c.host.id === s.host_id); return <label key={s.id}><input type="checkbox" checked={scope.includes(s.id)} onChange={e => setScope(e.target.checked ? [...scope, s.id] : scope.filter(id => id !== s.id))}/>{host?.host.target} / {s.spec.kind === 'file' ? s.spec.path : s.spec.kind === 'journal' ? s.spec.unit : s.spec.container_id}</label>; })}</div><h3>Visible columns</h3><div className="check-row">{columns.map(c => <label key={c}><input type="checkbox" checked={shown.includes(c)} disabled={c === 'message'} onChange={e => setShown(columns.filter(column => column === c ? e.target.checked : shown.includes(column)))}/>{columnLabels[c]}</label>)}</div></div></details>
-    <details className="source-health-menu"><summary>Source status <span className="status-count">{status?.sources.length ?? 0}</span>{status?.sources.some(s => /reconnect|error|fail|needs_action/i.test(s.state)) && <span className="status-attention">Needs attention</span>}</summary><div className="source-health" aria-label="Source health outside query filters">{status?.sources.map(s => { const host = status.connections.find(c => c.host.id === s.host_id); const name = s.spec.kind === 'file' ? s.spec.path : s.spec.kind === 'journal' ? s.spec.unit : s.spec.container_id; return <span key={s.id} className={`health-chip ${host?.host.environment ?? ''}`} title={`${host?.host.target} / ${name} · ${s.id} · ${s.detail ?? s.state}`} style={{ borderLeftColor: color(s.id) }}>{host?.host.target} / {name.split('/').at(-1)} · {s.state}{host?.host.environment === 'production' && <b className="badge production">Production</b>}</span>; })}{!status?.sources.length && <span className="hint">Start a log source to begin.</span>}</div></details></div>
+    <SourcePicker status={status} scope={scope} scopeHost={scopeHost} setScope={setScope} selectHost={selectHostLogs} addPath={addLogPath} manageSources={manageSources}/>
+    <div className="view-context-row"><details className="view-options"><summary>Columns</summary><div className="view-option-content"><h3>Visible columns</h3><div className="check-row">{columns.map(c => <label key={c}><input type="checkbox" checked={shown.includes(c)} disabled={c === 'message'} onChange={e => setShown(columns.filter(column => column === c ? e.target.checked : shown.includes(column)))}/>{columnLabels[c]}</label>)}</div></div></details>
+    <details className="source-health-menu"><summary>Source status <span className="status-count">{status?.sources.length ?? 0}</span>{status?.sources.some(s => /reconnect|error|fail|needs_action/i.test(s.state)) && <span className="status-attention">Needs attention</span>}</summary><div className="source-health" aria-label="Source health outside query filters">{status?.sources.map(s => { const host = status.connections.find(c => c.host.id === s.host_id); const name = s.spec.kind === 'file' ? s.spec.path : s.spec.kind === 'journal' ? s.spec.unit : s.spec.kind === 'kubernetes' ? `${s.spec.namespace}/${s.spec.pod}/${s.spec.container}` : s.spec.container_id; return <span key={s.id} className={`health-chip ${host?.host.environment ?? ''}`} title={`${host?.host.target} / ${name} · ${s.id} · ${s.detail ?? s.state}`} style={{ borderLeftColor: color(s.id) }}>{host?.host.target} / {name.split('/').at(-1)} · {s.state}{host?.host.environment === 'production' && <b className="badge production">Production</b>}</span>; })}{!status?.sources.length && <span className="hint">Start a log source to begin.</span>}</div></details></div>
     {scope.some(id => !status?.sources.some(s => s.id === id)) && <p className="notice">This filter includes unavailable source IDs. Restore does not start or grant sources.</p>}
     {notice && (notice.discarded !== '0' || notice.evicted !== '0' || !notice.complete || notice.gap_sources.length > 0) && <p className="hint retention-summary" aria-live="off">{notice.discarded} discarded · {notice.evicted} evicted{!notice.complete && ' · Catch-up incomplete; current snapshot reloaded'}{notice.gap_sources.length > 0 && ` · Gaps: ${notice.gap_sources.join(', ')}`}</p>}
     {error && <p role="alert" className="notice">{error}{error.includes('View expired') && <button onClick={() => { pausedRef.current = false; setPaused(false); anchor.current = null; setSession(n => n + 1); }}>Reopen viewer</button>}{expired && <button onClick={() => { anchor.current = null; readingAnchor.current = null; needsVerify.current = false; setExpired(false); void fetchRef.current(); }}>Reload retained logs</button>}</p>}
     {pages.some(p => !p.complete || p.truncated) && <p className="notice">Results are bounded/partial. {pages.some(p => p.truncated) ? 'Page reached the byte cap; continue with older pages.' : 'Scan deadline reached; narrow the query.'}</p>}
     <ResizableViewer side="right" panel={selection && viewId && inspectorVisible ? <Inspector active={active} sources={scope.length ? scope : status?.sources.map(s => s.id) ?? []} viewId={viewId} eventId={selection} nextGeneration={nextDetail} close={closeInspector} select={setSelection}/> : null}><div className="table-area"><div className="paging"><button disabled={busy || !pages[0]?.older_cursor || expired} onClick={() => { pause(); void fetchRef.current('older'); }}>Load older page</button><span role="status">{busy ? 'Reading…' : `${rows.length} cached rows / 2000`}{paused && ` · ${arrivals} new events across sources`}</span></div>
       <div className="log-viewport" ref={viewport} tabIndex={0} role="grid" aria-label="Log events. Space pauses, arrows select, Enter inspects" aria-rowcount={rows.length + 1} aria-colcount={shown.length} aria-activedescendant={activeRow && rows.slice(start, end).some(r => r.id === activeRow) ? `event-${activeRow}` : undefined}
-        onWheel={e => { if (e.deltaY < 0) pause(); }} onScroll={e => { const node = e.currentTarget; if (horizontal.current && horizontal.current.scrollLeft !== node.scrollLeft) horizontal.current.scrollLeft = node.scrollLeft; setScroll(node.scrollTop); if (pausedRef.current) rememberReadingAnchor(node.scrollTop); if (!inFlight.current && node.scrollTop + node.clientHeight < node.scrollHeight - HEIGHT * 2) pause(); }}
+        onWheel={e => { if (e.deltaY < 0) pause(); }} onScroll={e => { const node = e.currentTarget; setHorizontalScroll(node.scrollLeft); setScroll(node.scrollTop); if (pausedRef.current) rememberReadingAnchor(node.scrollTop); if (!inFlight.current && node.scrollTop + node.clientHeight < node.scrollHeight - HEIGHT * 2) pause(); }}
         onKeyDown={e => {
           if (e.target !== e.currentTarget) return;
           if (e.code === 'Space' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.repeat) { e.preventDefault(); if (pausedRef.current) resume(); else pause(); }
@@ -207,7 +212,7 @@ export function LiveView({ onGetStarted, status, scope, setScope, queryInput, vi
             </div>)}
           </div>)}
         </div>{rows.length === 0 && !busy && <div className="empty log-empty"><h3>{status?.sources.length ? 'No matching retained logs' : 'No logs yet'}</h3><p>{status?.sources.length ? 'Try a different query or source selection.' : 'Connect a host and add a source to start reading.'}</p>{!status?.sources.length && onGetStarted && <button className="primary" onClick={onGetStarted}>{status?.connections.length ? 'Add source' : 'Add connection'}</button>}</div>}
-      </div><div className="log-horizontal-scroll" ref={horizontal} tabIndex={0} aria-label="Scroll log messages horizontally" onScroll={event => { if (viewport.current && viewport.current.scrollLeft !== event.currentTarget.scrollLeft) viewport.current.scrollLeft = event.currentTarget.scrollLeft; }}><div style={{ width: tableMinWidth + verticalGutter }}/></div><details className="viewer-metrics"><summary>Viewer measurements</summary>{notice && <p className="hint">{notice.retained_rows} retained · {(Number(notice.resident_bytes) / 1024 / 1024).toFixed(1)} MiB charged · {notice.discarded} discarded · {notice.evicted} evicted</p>}<p className="hint">Frame interval p95 (last 180): {frame95.toFixed(1)} ms · Rust job {(Number(metrics.coreUs) / 1000).toFixed(1)} ms · IPC E2E {metrics.ipcMs.toFixed(1)} ms · Serialized page {metrics.pageBytes} B · Cache {Math.round(pages.reduce((n, p) => n + bytes(p), 0) / 1024)} KiB. Frame samples include idle time; use a scroll session for acceptance. New arrivals count all sources, independent of the query.</p></details>
+      </div><div className="log-horizontal-scroll"><input className="log-horizontal-slider" type="range" min={0} max={horizontalMax} step={1} value={Math.min(horizontalScroll, horizontalMax)} disabled={!horizontalMax} aria-label="Scroll log messages horizontally" style={{ '--scroll-thumb-width': scrollThumbWidth } as CSSProperties} onChange={event => { const offset = Number(event.target.value); setHorizontalScroll(offset); if (viewport.current) viewport.current.scrollLeft = offset; }}/></div><details className="viewer-metrics"><summary>Viewer measurements</summary>{notice && <p className="hint">{notice.retained_rows} retained · {(Number(notice.resident_bytes) / 1024 / 1024).toFixed(1)} MiB charged · {notice.discarded} discarded · {notice.evicted} evicted</p>}<p className="hint">Frame interval p95 (last 180): {frame95.toFixed(1)} ms · Rust job {(Number(metrics.coreUs) / 1000).toFixed(1)} ms · IPC E2E {metrics.ipcMs.toFixed(1)} ms · Serialized page {metrics.pageBytes} B · Cache {Math.round(pages.reduce((n, p) => n + bytes(p), 0) / 1024)} KiB. Frame samples include idle time; use a scroll session for acceptance. New arrivals count all sources, independent of the query.</p></details>
     </div></ResizableViewer>
   </section>;
 }

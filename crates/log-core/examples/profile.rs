@@ -113,7 +113,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     let mut framer = Framer::default();
     let mut frames = 0;
-    framer.push(&vec![b'x'; 1024 * 1024], |_| frames += 1);
+    framer.push(&vec![b'x'; 1024 * 1024], |_| frames += 1).expect("offset");
     framer.push(b"\n", |f| {
         println!(
             "oversize bytes={} truncated={} end={}",
@@ -121,7 +121,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             f.truncated,
             f.end_offset
         )
-    });
+    }).expect("offset");
     let mut assembler = Assembler::default();
     for (n, line) in [
         "Traceback (most recent call last):",

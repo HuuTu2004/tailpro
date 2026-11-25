@@ -1,4 +1,4 @@
-import type { ReadRequest, ReadResponse, ServiceMapping, TopologyRequest, TopologyGraph } from '../contracts/generated';
+import type { KubernetesCapability, ReadRequest, ReadResponse, ServiceMapping, TopologyRequest, TopologyGraph } from '../contracts/generated';
 import { invoke as invokeNative } from '@tauri-apps/api/core';
 import type { GrantInfo, Enrollment, Selection, ExportFormat, PreparedPreview, ExplainProvider, Explanation } from '../contracts/generated';
 import type { AppStatus, ConfigImport, DiscoveryRequest, DiscoveryResult, HostProfile, Preview, SourceSpec, ViewRequest, ViewPage, ViewNotice, DetailRequest, EventDetail, SavedView } from '../contracts/generated';
@@ -10,6 +10,10 @@ function invoke<T>(command: string, args?: Record<string, unknown>): Promise<T> 
   return invokeNative<T>(command, args);
 }
 export const native = {
+  inspectKubernetes: (hostId: string, kubeconfig: string, context: string, namespace: string, pod: string, container: string) => invoke<KubernetesCapability>('inspect_kubernetes', { hostId, kubeconfig, context, namespace, pod, container }),
+  previewParser: (source: string, config: string, sample: string) => invoke<string>('preview_parser', { source, config, sample }),
+  applyParser: (source: string, config: string) => invoke<string>('apply_parser', { source, config }),
+  ingestionDiagnostics: () => invoke<string>('ingestion_diagnostics'),
   openWorkspaceManager: (section: 'connections' | 'settings') => invoke<void>('open_workspace_manager', { section }),
   closeWorkspaceManager: () => invoke<void>('close_workspace_manager'),
   openConnectionEditor: () => invoke<void>('open_connection_editor'),

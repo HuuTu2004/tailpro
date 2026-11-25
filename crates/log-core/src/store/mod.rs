@@ -19,6 +19,7 @@ impl Drop for Segment {
 }
 pub(crate) struct SourceStore {
     pub generation: u64,
+    pub metrics: crate::model::IngestionMetrics,
     pub sealed: VecDeque<Arc<Segment>>,
     pub tail: Vec<Event>,
     pub tail_bytes: usize,
@@ -29,6 +30,7 @@ impl SourceStore {
     pub fn new(generation: u64) -> Self {
         Self {
             generation,
+            metrics: Default::default(),
             sealed: VecDeque::new(),
             tail: vec![],
             tail_bytes: 0,

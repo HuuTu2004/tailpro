@@ -243,9 +243,11 @@ impl AppHandle {
                     environment: host.environment.clone(),
                     level: format!("{:?}", e.level),
                     message,
-                    time: bounded(e.event_time.as_deref().unwrap_or(&e.observed_at_ms), 128),
+                    time: bounded(e.event_time.as_deref().or(e.transport_time.as_deref()).unwrap_or(&e.observed_at_ms), 128),
                     time_basis: if e.event_time.is_some() {
                         "event_time"
+                    } else if e.transport_time.is_some() {
+                        "transport_time"
                     } else {
                         "local_observed_at"
                     }
@@ -335,6 +337,14 @@ impl AppHandle {
                 ),
                 Err(e) => (vec![], false, Some(e)),
             };
+            let (nodes,more,json_error)=if matches!(event.evidence.decoder,log_core::model::evidence::Decoder::Logfmt) && path.is_empty() {
+                let mut fields=Vec::new();let mut count=0;
+                let decoded=log_core::parse::decode::pairs(&event.raw,|key,value|{
+                    if count>=request.offset as usize && fields.len()<200 {fields.push(InspectorNode{index:count as u32,key:bounded(key,256),value:serde_json::to_string(&bounded(&value,512)).unwrap_or_default(),kind:"string".into(),truncated:key.len()>256||value.len()>512});}
+                    count+=1;
+                });
+                match decoded{Ok(())=>(fields,count>request.offset as usize+200,None),Err(e)=>(vec![],false,Some(e.into()))}
+            } else {(nodes,more,json_error)};
             let mut group_parts = Vec::new();
             let mut group_parts_truncated = false;
             if let Some(group) = &event.group_id {
@@ -355,7 +365,10 @@ impl AppHandle {
                 schema_version: 1,
                 generation: request.generation,
                 event_id: event.id.clone(),
-                raw: request.include_raw.then(|| event.raw.clone()),
+                raw: request.include_raw.then(|| event.raw.to_string()),
+                raw_hex: request.include_raw.then(||event.raw.bytes().iter().chain(event.ending.bytes()).take(16*1024).map(|b|format!("{b:02x}")).collect()),
+                raw_bytes: (event.raw.bytes().len()+event.ending.bytes().len()).to_string(),
+                evidence_json: serde_json::json!({"parser":event.evidence,"event_time":event.event_time,"transport_time":event.transport_time,"observed_time_ms":event.observed_at_ms,"ending":event.ending,"fragment":event.fragment.map(|f|serde_json::json!({"record":f.record.to_string(),"start":f.start.to_string(),"end":f.end.to_string(),"final":f.final_part})),"coverage":"Retained parts only; neighbors can be evicted. Fragment bodies are withheld from external consumers."}).to_string(),
                 quality: format!("{:?}", event.quality),
                 group_id: event.group_id.clone(),
                 group_parts,

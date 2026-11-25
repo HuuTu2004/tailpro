@@ -2,8 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import type { Candidate, ConnectionInfo, DiscoveryResult, SourceInfo, SourceSpec } from '../../shared/contracts/generated';
 import { native } from '../../shared/client/native';
 import './sources.css';
-type Props = { host?: ConnectionInfo; sources: SourceInfo[]; requestedPath?: { value: string; revision: number }; run: (action: () => Promise<unknown>) => void };
+import { ParserSettings } from './ParserSettings';
+import { KubernetesSource } from './KubernetesSource';
+type Props = { host?: ConnectionInfo; sources: SourceInfo[]; requestedPath?: { value: string; revision: number; mode?: 'file' | 'discover' }; run: (action: () => Promise<unknown>) => void };
 export function Sources({ host, sources, requestedPath, run }: Props) {
+  const [diagnostics, setDiagnostics] = useState('');
   const [composerOpen, setComposerOpen] = useState(sources.length === 0);
   const [mode, setMode] = useState<'file' | 'discover'>('file');
   const [pending, setPending] = useState('');
@@ -32,7 +35,7 @@ export function Sources({ host, sources, requestedPath, run }: Props) {
     if (host) native.pins(host.host.id).then(value => { if (alive) setPins(value); }).catch(() => { if (alive) setPins([]); });
     return () => { alive = false; hostRevision.current++; version.current++; discoveryVersion.current++; if (host) void native.cancelDiscovery(host.host.id).catch(() => {}); };
   }, [host?.host.id]);
-  useEffect(() => { if (requestedPath) { setComposerOpen(true); setMode('file'); setPath(requestedPath.value); requestAnimationFrame(() => pathInput.current?.focus()); } }, [requestedPath]);
+  useEffect(() => { if (requestedPath) { setComposerOpen(true); setMode(requestedPath.mode ?? 'file'); setPath(requestedPath.value); if (requestedPath.mode !== 'discover') requestAnimationFrame(() => pathInput.current?.focus()); } }, [requestedPath]);
   useEffect(() => {
     const current = ++version.current;
     const index = path.lastIndexOf('/');
@@ -85,10 +88,12 @@ export function Sources({ host, sources, requestedPath, run }: Props) {
     <div className="section-heading sources-page-heading"><div><h2>{host?.host.target ?? 'Choose a connection'}</h2><p className="subtle">Manage reading sources, or add a file, Docker container or journal.</p></div><div className="actions">{host?.host.environment === 'production' && <span className="badge production">Production</span>}<button className="primary" disabled={!host} aria-expanded={composerOpen} aria-controls="source-composer" onClick={() => setComposerOpen(open => !open)}>{composerOpen ? 'Hide add source' : '+ Add source'}</button></div></div>
     {!host && <p className="notice">Choose a host from Connections before adding sources.</p>}
     {host && host.state !== 'connected' && <p className="notice">{host.host.target} is {host.state.replaceAll('_', ' ')}. Connect this host before starting or discovering sources.</p>}
+    <button onClick={() => run(async () => setDiagnostics(JSON.stringify(JSON.parse(await native.ingestionDiagnostics()), null, 2)))}>Refresh ingestion diagnostics</button>{diagnostics && <details><summary>Local counters & coverage</summary><pre className="raw-text">{diagnostics}</pre></details>}
     <section className="page-card reading-source-section"><div className="section-heading"><h3>Reading sources</h3><span>{sources.length} / 8</span></div>
     {!sources.length && <p className="subtle">No sources are reading on this host. Add a source to get started.</p>}
-    {sources.map(s => <article className="candidate" key={s.id}><div><strong>{s.spec.kind === 'file' ? s.spec.path : s.spec.kind === 'journal' ? s.spec.unit : s.spec.container_id}</strong><p><span className={`source-kind source-kind-${s.spec.kind}`}>{s.spec.kind === 'journal' ? 'Journal' : s.spec.kind === 'docker' ? 'Docker' : 'File'}</span> · {s.state.replaceAll('_',' ')}</p>{s.detail && <small>{s.detail}</small>}</div><div className="actions">{s.spec.kind === 'file' && <button onClick={() => pinSource(s)}>Pin path</button>}<button onClick={() => run(() => native.stop(s.id))}>Stop</button></div></article>)}
+    {sources.map(s => <article className="candidate" key={s.id}><div><strong>{s.spec.kind === 'file' ? s.spec.path : s.spec.kind === 'journal' ? s.spec.unit : s.spec.kind === 'kubernetes' ? `${s.spec.namespace}/${s.spec.pod}/${s.spec.container}` : s.spec.container_id}</strong><p><span className={`source-kind source-kind-${s.spec.kind}`}>{s.spec.kind === 'journal' ? 'Journal' : s.spec.kind === 'docker' ? 'Docker' : s.spec.kind === 'kubernetes' ? 'Kubernetes' : 'File'}</span> · {s.state.replaceAll('_',' ')}</p>{s.detail && <small>{s.detail}</small>}<ParserSettings source={s.id}/></div><div className="actions">{s.spec.kind === 'file' && <button onClick={() => pinSource(s)}>Pin path</button>}<button onClick={() => run(() => native.stop(s.id))}>Stop</button></div></article>)}
     </section>
+    {host && <KubernetesSource key={host.host.id} hostId={host.host.id} disabled={host.state !== 'connected' || Boolean(pending) || sources.length >= 8} start={startSource}/>}
     {composerOpen && <section className="page-card source-composer" id="source-composer"><div className="section-heading"><h3>Add a source</h3><div className="source-mode" role="tablist" aria-label="Add source method" onKeyDown={event => { if (event.key === 'ArrowLeft' || event.key === 'ArrowRight' || event.key === 'Home' || event.key === 'End') { event.preventDefault(); const next = event.key === 'Home' ? 'file' : event.key === 'End' ? 'discover' : mode === 'file' ? 'discover' : 'file'; setMode(next); document.getElementById(`source-${next}-tab`)?.focus(); } }}><button id="source-file-tab" role="tab" tabIndex={mode === 'file' ? 0 : -1} aria-selected={mode === 'file'} aria-controls="source-file-panel" onClick={() => setMode('file')}>File path</button><button id="source-discover-tab" role="tab" tabIndex={mode === 'discover' ? 0 : -1} aria-selected={mode === 'discover'} aria-controls="source-discover-panel" onClick={() => setMode('discover')}>Discover sources</button></div></div>
     <div id="source-file-panel" role="tabpanel" aria-labelledby="source-file-tab" hidden={mode !== 'file'}>
     <p className="subtle">Enter an absolute path. Reading starts only when you press Start file.</p>

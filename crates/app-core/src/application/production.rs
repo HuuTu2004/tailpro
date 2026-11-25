@@ -66,7 +66,7 @@ pub(super) fn signature(p: &Event) -> Option<(String, String)> {
     }
     // Keep the entire remaining representation, including every stack frame.
     // A digest is only a bucket key: callers compare representations on collisions.
-    let representation = value.map_or_else(|| p.raw.clone(), |v| v.to_string());
+    let representation = value.map_or_else(|| p.raw.to_string(), |v| v.to_string());
     let representation = format!("{:?}:{}", p.level, representation);
     Some((
         format!("{:x}", Sha256::digest(representation.as_bytes())),

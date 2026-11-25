@@ -50,9 +50,33 @@ function App() {
   const [status, setStatus] = useState<AppStatus>();
   const [selected, setSelected] = useState('');
   const [error, setError] = useState('');
-  const [scope, setScope] = useState<string[]>([]);
+  const [selectedSources, setSelectedSources] = useState<string[]>([]);
+  const [scopeHost, setScopeHost] = useState<string | null>(null);
+  const scopeRevision = useRef(0);
+  const hostSources = scopeHost ? status?.sources.filter(source => source.host_id === scopeHost).map(source => source.id) ?? [] : [];
+  const scope = scopeHost && hostSources.length ? hostSources : selectedSources;
+  function setScope(ids: string[]) { scopeRevision.current++; setScopeHost(null); setSelectedSources(ids); }
+  function selectHostLogs(hostId: string) {
+    const ids = status?.sources.filter(source => source.host_id === hostId).map(source => source.id) ?? [];
+    if (!ids.length) return;
+    scopeRevision.current++; setScopeHost(hostId); setSelectedSources(ids); setSelected(hostId);
+  }
+  function manageHostSources(hostId: string) {
+    setSelected(hostId); setPage('workspace'); setTool('sources');
+    setRequestedPath({ value: '', revision: Date.now(), hostId, mode: 'discover' });
+  }
+  async function addLogPath(hostId: string, path: string, combine: boolean) {
+    const revision = scopeRevision.current;
+    const existing = status?.sources.find(source => source.host_id === hostId && source.spec.kind === 'file' && source.spec.path === path);
+    const id = existing?.id ?? await native.start(hostId, { kind: 'file', path });
+    await refreshStatus();
+    if (revision !== scopeRevision.current) return;
+    if (scopeHost === hostId) return;
+    const retainedSelection = scope.filter(sourceId => status?.sources.some(source => source.id === sourceId));
+    setScope(combine && retainedSelection.length ? [...new Set([...retainedSelection, id])] : [id]);
+  }
   const [palette, setPalette] = useState(false);
-  const [requestedPath, setRequestedPath] = useState<{ value: string; revision: number; hostId: string }>();
+  const [requestedPath, setRequestedPath] = useState<{ value: string; revision: number; hostId: string; mode?: 'file' | 'discover' }>();
   const queryInput = useRef<HTMLInputElement>(null);
   const viewport = useRef<HTMLDivElement>(null);
   const panel = useRef<HTMLElement>(null);
@@ -154,7 +178,7 @@ function App() {
     <main className="app-main">
       {!managementWindow && <section className="workspace-page" id="page-workspace" role="region" aria-label="Live logs" hidden={page !== 'workspace' || managementWindow}>
         <div className={'workspace-body' + (tool ? ' has-tool' : '')}>
-          <div className="log-workspace">{!managementWindow && <LiveView onGetStarted={() => connections.length ? toggleTool('sources') : changePage('connections')} status={status} scope={scope} setScope={setScope} queryInput={queryInput} viewport={viewport} active={page === 'workspace'} inspectorVisible={!tool} onInspect={() => setTool(null)}/>}</div>
+          <div className="log-workspace">{!managementWindow && <LiveView onGetStarted={() => connections.length ? toggleTool('sources') : changePage('connections')} status={status} scope={scope} setScope={setScope} scopeHost={scopeHost} selectHostLogs={selectHostLogs} addLogPath={addLogPath} manageSources={manageHostSources} queryInput={queryInput} viewport={viewport} active={page === 'workspace'} inspectorVisible={!tool} onInspect={() => setTool(null)}/>}</div>
           {page === 'workspace' && currentTool && <aside className="workspace-tool-panel" id="workspace-tool-panel" ref={panel} tabIndex={-1} aria-label={currentTool.label} onKeyDown={event => { if (event.key === 'Escape' && !event.defaultPrevented && !document.querySelector('dialog[open]')) { event.stopPropagation(); closeTool(); } }}>
             <div className="tool-panel-header"><div><Icon name={currentTool.id}/><strong>{currentTool.label}</strong></div><button className="icon-button" onClick={closeTool} title="Close tool · Escape" aria-label={'Close ' + currentTool.label}><Icon name="close"/></button></div>
             <div className="tool-panel-content">

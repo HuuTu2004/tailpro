@@ -1,5 +1,10 @@
 use serde::{Deserialize, Serialize};
 
+pub mod ingestion;
+pub mod evidence;
+mod payload;
+pub use payload::{Fragment, RawPayload, RecordEnding};
+
 pub const FRAME_BYTES: usize = 256 * 1024;
 pub const MAX_SOURCES: usize = 8;
 pub const MIB: usize = 1024 * 1024;
@@ -25,6 +30,9 @@ pub enum Level {
     Unknown,
 }
 
+impl Level {
+    pub fn as_str(self)->&'static str {match self{Self::Trace=>"trace",Self::Debug=>"debug",Self::Info=>"info",Self::Warn=>"warn",Self::Error=>"error",Self::Unknown=>"unknown"}}
+}
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Quality {
     pub malformed: bool,
@@ -33,6 +41,8 @@ pub struct Quality {
     pub continuation: bool,
     pub uncertain: bool,
     pub replay_suspected: bool,
+    pub fragmented: bool,
+    pub incomplete: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -44,9 +54,15 @@ pub struct Event {
     pub group_id: Option<String>,
     pub observed_at_ms: String,
     pub event_time: Option<String>,
+    pub transport_time: Option<String>,
+    pub evidence: evidence::ParseEvidence,
     pub level: Level,
     pub message: String,
-    pub raw: String,
+    pub raw: RawPayload,
+    #[serde(skip)]
+    pub ending: RecordEnding,
+    #[serde(skip)]
+    pub fragment: Option<Fragment>,
     pub trace_id: Option<String>,
     pub order_id: Option<String>,
     pub user_id: Option<String>,
@@ -56,6 +72,8 @@ pub struct Event {
     pub physical: Vec<u64>,
     #[serde(skip)]
     pub sequence: u64,
+    #[serde(skip)]
+    pub checkpoint_complete: bool,
 }
 impl Event {
     pub fn charged_bytes(&self) -> usize {
@@ -66,8 +84,10 @@ impl Event {
             + self.group_id.as_ref().map_or(0, String::capacity)
             + self.observed_at_ms.capacity()
             + self.event_time.as_ref().map_or(0, String::capacity)
+            + self.transport_time.as_ref().map_or(0, String::capacity)
+            + self.evidence.charged_bytes()
             + self.message.capacity()
-            + self.raw.capacity()
+            + self.raw.charged_bytes()
             + self.trace_id.as_ref().map_or(0, String::capacity)
             + self.order_id.as_ref().map_or(0, String::capacity)
             + self.user_id.as_ref().map_or(0, String::capacity)
@@ -82,4 +102,14 @@ pub struct Counters {
     pub discarded: u64,
     pub evicted: u64,
     pub delivered: u64,
+}
+
+/// Bounded cardinality: one cumulative entry per retained/active source (at most 8).
+#[derive(Clone, Debug, Default, Serialize)]
+pub struct IngestionMetrics {
+    pub admission_units: u64, pub physical_records: u64,
+    pub accepted_units:u64, pub gap_units:u64,
+    pub observed_bytes:u64, pub represented_bytes:u64, pub gap_bytes:u64,
+    pub retention_evicted_bytes:u64, pub raw_fallback:u64, pub malformed:u64,
+    pub encoding_loss:u64, pub conflicts:u64, pub fragments:u64,
 }

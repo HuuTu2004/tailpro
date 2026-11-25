@@ -18,6 +18,7 @@ time = { version = "0.3", features = ["parsing", "formatting"] }
 
 app-protocol = { path = "../app-protocol" }
 regex = "1"
+toml = "=1.2.1"
 libc = "0.2"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
 

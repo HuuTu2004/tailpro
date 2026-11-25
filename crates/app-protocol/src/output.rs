@@ -27,6 +27,10 @@ pub struct Evidence {
     pub text: String,
     pub observed_at_ms: String,
     pub event_time: Option<String>,
+    #[serde(default)]
+    pub transport_time: Option<String>,
+    #[serde(default)]
+    pub provenance: String,
     pub redaction_incomplete: bool,
     pub quality: String,
 }
@@ -46,6 +50,12 @@ pub struct GrantedSource {
 }
 #[derive(Clone, Debug, Serialize, Deserialize, TS)]
 pub struct ReadResponse {
+    #[serde(default)]
+    pub query_scanned: String,
+    #[serde(default)]
+    pub query_matched_lower_bound: String,
+    #[serde(default)]
+    pub query_returned: u32,
     pub schema_version: u32,
     pub sources: Vec<GrantedSource>,
     pub events: Vec<Evidence>,

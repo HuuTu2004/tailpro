@@ -17,6 +17,7 @@ Khi giao code, chỉ định một mục, ví dụ `2.1`. Mục khác trong phas
 1. Hiển thị Time/Server/Source/Level/Message/trace_id/duration_ms từ DTO, stable source badges và bounded column selection.
 2. Kết nối paged snapshot→live view, virtualization, coalesced notices/ACK và latest-wins result generation.
 3. Giữ bounded page cache, release view/subscription khi đóng; expose source health/gap ngoài filtered rows và nhãn Production từ 1.8.
+4. Chọn nguồn bằng các hàng theo host: All hosts, All của từng host và từng ô File/Docker/Journal. Combine sources gộp nhiều nguồn trên cùng bảng; All của host theo dõi thêm nguồn mới. Add path mở form nhỏ tại hàng đó, Start & view mới bắt đầu đọc; Discover sources mở công cụ discovery của đúng host. Columns là mục riêng. Giữ giới hạn tám nguồn hiện có, không tự dò hay mở file khi chỉ chọn bộ lọc.
 
 **Xong khi:** Trace một ID qua ít nhất ba nguồn trên 2 host/4 sources; chỉ page cần thiết vào JS. Đo frame/serialization và freeze UI 30s không tăng queue vô hạn.
 

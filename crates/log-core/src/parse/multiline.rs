@@ -6,6 +6,9 @@ enum Kind {
     Go,
     Python,
     Node,
+    Java,
+    Php,
+    Rust,
 }
 struct Pending {
     event: Event,
@@ -38,15 +41,13 @@ impl Assembler {
     }
 
     fn kind(text: &str) -> Option<Kind> {
-        if text.starts_with("panic:") || text.starts_with("fatal error:") {
-            Some(Kind::Go)
-        } else if text.starts_with("Traceback (most recent call last):") {
-            Some(Kind::Python)
-        } else if text.contains("Error:") || text.starts_with("Error") {
-            Some(Kind::Node)
-        } else {
-            None
-        }
+        if text.starts_with("thread '") && text.contains("panicked at") || text == "stack backtrace:" { Some(Kind::Rust) }
+        else if text.starts_with("PHP Fatal error:") || text.starts_with("PHP Stack trace:") || text.starts_with("Stack trace:") { Some(Kind::Php) }
+        else if text.starts_with("Exception in thread ") || text.split_whitespace().next().is_some_and(|s| s.ends_with("Exception:") || s.ends_with("Error:")) && text.contains('.') { Some(Kind::Java) }
+        else if text.starts_with("panic:") || text.starts_with("fatal error:") { Some(Kind::Go) }
+        else if text.starts_with("Traceback (most recent call last):") { Some(Kind::Python) }
+        else if text.starts_with("Error:") || text.split_whitespace().next().is_some_and(|s|s.ends_with("Error:")) { Some(Kind::Node) }
+        else {None}
     }
     fn continuation(kind: Kind, text: &str) -> bool {
         if text.split_whitespace().next().is_some_and(|word| {
@@ -78,6 +79,17 @@ impl Assembler {
                     || text.contains("Exception:")
                     || text.starts_with("During handling")
             }
+            Kind::Rust => {
+                let t=text.trim_start();
+                t=="stack backtrace:" || t.starts_with("at ") || t.starts_with("note: run with ")
+                    || t.split_once(':').is_some_and(|(n,_)|!n.is_empty()&&n.bytes().all(|b|b.is_ascii_digit()))
+            }
+            Kind::Java => {
+                let t=text.trim_start();t.starts_with("at ")||t.starts_with("Caused by:")||t.starts_with("Suppressed:")||t.starts_with("... ")&&t.ends_with(" more")
+            }
+            Kind::Php => {
+                let t=text.trim_start();t=="Stack trace:"||t.starts_with("thrown in ")||t.starts_with('#')&&t.as_bytes().get(1).is_some_and(u8::is_ascii_digit)
+            }
             Kind::Node => {
                 text.trim_start().starts_with("at ") || text.trim_start().starts_with("Caused by:")
             }
@@ -85,14 +97,25 @@ impl Assembler {
     }
     pub fn push(&mut self, mut event: Event, now: Instant) -> Vec<Event> {
         let mut ready = self.flush_due(now);
+        if event.fragment.is_some() || event.quality.incomplete {
+            ready.extend(self.flush(now));
+            self.late = None;
+            ready.push(event);
+            return ready;
+        }
         if let Some(p) = &mut self.pending {
-            if Self::continuation(p.kind, &event.message)
+            if event.event_time.is_none()
+                && !matches!(event.evidence.decoder,crate::model::evidence::Decoder::Json|crate::model::evidence::Decoder::Logfmt|crate::model::evidence::Decoder::Rule)
+                && p.event.evidence.revision == event.evidence.revision
+                && p.event.generation == event.generation
+                && Self::continuation(p.kind, &event.message)
                 && p.lines < 200
-                && p.event.raw.len() + event.raw.len() < self.limit
+                && p.event.raw.bytes().len() + p.event.ending.bytes().len() + event.raw.bytes().len() < self.limit
                 && p.event.message.len() + event.message.len() < self.limit
             {
-                p.event.raw.push('\n');
-                p.event.raw.push_str(&event.raw);
+                let separator = p.event.ending.bytes();
+                p.event.raw.append(&event.raw, separator);
+                p.event.ending = event.ending;
                 p.event.message.push('\n');
                 p.event.message.push_str(&event.message);
                 p.event.physical.extend(event.physical);
@@ -101,13 +124,15 @@ impl Assembler {
                 p.touched = now;
                 return ready;
             }
+            if Self::continuation(p.kind,&event.message) { p.event.quality.incomplete=true; }
             ready.extend(self.flush(now));
         }
         if let Some((id, kind, until)) = &self.late {
-            if now <= *until && Self::continuation(*kind, &event.message) {
+            if now <= *until && event.event_time.is_none() && !matches!(event.evidence.decoder,crate::model::evidence::Decoder::Json|crate::model::evidence::Decoder::Logfmt|crate::model::evidence::Decoder::Rule) && Self::continuation(*kind, &event.message) {
                 event.group_id = Some(id.clone());
-                event.level = Level::Error;
+                if event.level == Level::Unknown {event.level = Level::Error;}
                 event.quality.continuation = true;
+                event.quality.incomplete = true;
                 ready.push(event);
                 return ready;
             }
@@ -115,7 +140,7 @@ impl Assembler {
         }
         let kind = Self::kind(&event.message);
         if let Some(kind) = kind {
-            event.level = Level::Error;
+            if event.level == Level::Unknown {event.level = Level::Error;}
             event.group_id = Some(format!(
                 "group:{}:{}:{:?}:{}",
                 event.source, event.generation, event.stream, event.physical[0]

@@ -93,6 +93,11 @@ pub enum SourceSpec {
     Journal {
         unit: String,
     },
+    Kubernetes {
+        kubeconfig: String, context: String, namespace: String, pod: String,
+        pod_uid: String, container: String, container_id: String,
+        restart_count: u32, config_digest: String, trusted: bool, previous: bool,
+    },
 }
 #[derive(Clone, Debug, Serialize, TS)]
 pub struct SourceInfo {
@@ -177,6 +182,7 @@ pub fn typescript() -> String {
         DiscoveryResult::decl(&config),
         SourceSpec::decl(&config),
         SourceInfo::decl(&config),
+        KubernetesCapability::decl(&config),
         Health::decl(&config),
         AppStatus::decl(&config),
         LogPreview::decl(&config),
@@ -278,6 +284,9 @@ pub struct EventDetail {
     pub generation: u32,
     pub event_id: String,
     pub raw: Option<String>,
+    pub raw_hex: Option<String>,
+    pub raw_bytes: String,
+    pub evidence_json: String,
     pub quality: String,
     pub group_id: Option<String>,
     pub group_parts: Vec<String>,
@@ -285,4 +294,10 @@ pub struct EventDetail {
     pub nodes: Vec<InspectorNode>,
     pub more: bool,
     pub json_error: Option<String>,
+}
+
+#[derive(Clone,Debug,Serialize,Deserialize,TS)]
+pub struct KubernetesCapability {
+    pub config_digest:String, pub pod_uid:String, pub container_id:String,
+    pub restart_count:u32, pub previous_available:bool, pub coverage:String,
 }

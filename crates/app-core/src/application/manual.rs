@@ -11,6 +11,7 @@ impl AppHandle {
             environment: Environment::Production,
         };
         let cancel = self.cancel.child_token();
+        let ingest=self.engine.register(id,1).await?;
         self.state.lock().unwrap().contexts.insert(
             id.into(),
             Context {
@@ -21,6 +22,7 @@ impl AppHandle {
         self.state.lock().unwrap().sources.insert(
             id.into(),
             Source {
+                parser: ingest.parser.clone(),
                 info: Arc::new(Mutex::new(SourceInfo {
                     id: id.into(),
                     host_id: "manual".into(),
@@ -35,6 +37,6 @@ impl AppHandle {
                 task: tokio::spawn(async move { cancel.cancelled().await }),
             },
         );
-        self.engine.register(id, 1).await
+        Ok(ingest)
     }
 }

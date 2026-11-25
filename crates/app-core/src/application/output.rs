@@ -415,7 +415,7 @@ impl AppHandle {
                 "selection": selection.event_ids,
                 "window": {"from_ms": selection.from_ms, "to_ms": selection.to_ms},
                 "time_basis": "local_observed_at_ms; event_time unverified",
-                "coverage": "retained authorized selection only", "gaps": [], "complete": true,
+                "coverage": "retained authorized selection only; source history/permissions can be unknown; fragments/incomplete records withheld before predicates", "gaps": [], "complete": true,
                 "redaction_profile": REDACTION_PROFILE,
                 "csv_transform": "quote every cell; neutralize leading formula/control including whitespace"
             });
@@ -446,7 +446,7 @@ impl AppHandle {
                 let row = serde_json::json!({
                     "record_type": "event", "source": projected.source, "server": server,
                     "environment": host.environment, "observed_at_ms": projected.observed_at_ms,
-                    "event_time": projected.event_time, "level": projected.level,
+                    "event_time": projected.event_time, "transport_time":projected.transport_time, "provenance":projected.evidence, "level": projected.level,
                     "text": projected.raw, "redaction_incomplete": partial
                 });
                 bytes += serde_json::to_vec(&row)?.len() * 2 + 128;
