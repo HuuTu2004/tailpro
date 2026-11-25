@@ -1,0 +1,8 @@
+.add-log-window { height: 100dvh; overflow: auto; padding: 20px 24px; background: var(--surface); }
+.add-log-window form { display: flex; flex-direction: column; min-height: 100%; }
+.add-log-window .add-log-host { display: flex; align-items: center; gap: 8px; margin: 0 0 16px; overflow-wrap: anywhere; font-size: 12px; }
+.add-log-window form > label { margin: 0; }
+.add-log-window input { font-family: var(--font-log); font-size: 13px; }
+.add-log-window .hint { margin: 8px 0 16px; }
+.add-log-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: auto; padding-top: 12px; }
+.add-log-actions button { min-width: 80px; }

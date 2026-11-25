@@ -8,12 +8,12 @@ pub fn run() {
             let app = window.app_handle();
             match event {
                 tauri::WindowEvent::CloseRequested { api, .. }
-                    if window.label() == "main" && (app.get_webview_window("connections-manager").is_some() || app.get_webview_window("settings-manager").is_some() || app.get_webview_window("connection-editor").is_some()) =>
+                    if window.label() == "main" && (app.get_webview_window("connections-manager").is_some() || app.get_webview_window("settings-manager").is_some() || app.get_webview_window("connection-editor").is_some() || app.get_webview_window("log-path-editor").is_some()) =>
                 {
                     api.prevent_close();
                     let _ = window.hide();
                 }
-                tauri::WindowEvent::Destroyed if matches!(window.label(), "connections-manager" | "settings-manager" | "connection-editor") => {
+                tauri::WindowEvent::Destroyed if matches!(window.label(), "connections-manager" | "settings-manager" | "connection-editor" | "log-path-editor") => {
                     super::windows::manager_closed(app, window.label());
                 }
                 _ => {}
@@ -31,6 +31,10 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             super::windows::open_workspace_manager,
             super::windows::close_workspace_manager,
+            super::log_path_window::open_log_path_editor,
+            super::log_path_window::close_log_path_editor,
+            super::log_path_window::submit_log_path,
+            super::log_path_window::finish_log_path,
             super::windows::open_connection_editor,
             super::windows::close_connection_editor,
             super::commands::test_connection,

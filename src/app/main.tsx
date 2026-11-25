@@ -2,6 +2,7 @@ import { Button } from '../shared/ui/Controls';
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Connections } from '../features/connections/Connections';
+import { AddLogPath } from '../features/sources/AddLogPath';
 import { HostLogTree } from '../features/sources/HostLogTree';
 import { sourceKey, type LogSource } from '../features/sources/source-labels';
 import { SourceTabs } from '../features/live-view/SourceTabs';
@@ -141,6 +142,8 @@ function App() {
     setPage(next);
   }
   const connections = status?.connections ?? [];
+
+  if (route.get('manager') === 'add-log') return <AddLogPath hostId={route.get('host') ?? ''} status={status}/>;
 
   if (connectionEditor) return <div className="connection-editor-shell"><Connections standaloneEditor connections={connections} selected={selected} select={setSelected} run={run}/></div>;
 

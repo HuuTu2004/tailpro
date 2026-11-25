@@ -1,7 +1,8 @@
 import { Icon } from '../../shared/ui/Icon';
 import { Button } from '../../shared/ui/Controls';
-import { useEffect, useRef, useState, type FormEvent } from 'react';
-import type { ConnectionInfo, SourceInfo } from '../../shared/contracts/generated';
+import { useEffect, useRef, useState } from 'react';
+import { listen } from '@tauri-apps/api/event';
+import type { AddLogPathRequest, ConnectionInfo, SourceInfo } from '../../shared/contracts/generated';
 import { native } from '../../shared/client/native';
 import { sourceKey, sourceLabel, sourcePath, type LogSource } from './source-labels';
 import './host-log-tree.css';
@@ -24,10 +25,9 @@ export function HostLogTree({ connections, sources, selectedHost, scope, opening
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [focused, setFocused] = useState('');
   const [filter, setFilter] = useState('');
-  const [addingHost, setAddingHost] = useState('');
-  const [path, setPath] = useState('');
+  const [editorReady, setEditorReady] = useState(false);
   const [pathError, setPathError] = useState('');
-  const pathInput = useRef<HTMLInputElement>(null);
+  const addRequestedPath = useRef<(hostId: string, path: string) => string | null>(() => 'The host navigator is not ready.');
   const rememberAfterRead = useRef(new Set<string>());
   const hostsKey = connections.map(host => `${host.host.id}:${host.state}`).join('|');
   const sourcesKey = JSON.stringify(sources.map(source => [source.host_id, source.spec]));
@@ -90,21 +90,33 @@ export function HostLogTree({ connections, sources, selectedHost, scope, opening
     return () => { alive = false; };
   }, [readerStates]);
   const needle = filter.trim().toLowerCase();
-  function startAdding(hostId: string) {
-    selectHost(hostId); setExpanded(previous => new Set([...previous, hostId]));
-    setAddingHost(hostId); setPath(''); setPathError('');
-    requestAnimationFrame(() => pathInput.current?.focus());
+  async function startAdding(hostId: string) {
+    selectHost(hostId); setExpanded(previous => new Set([...previous, hostId])); setPathError('');
+    try { await native.openLogPathEditor(hostId); }
+    catch (reason) { setPathError(String(reason)); }
   }
-  function addPath(event: FormEvent) {
-    event.preventDefault();
-    const value = path.trim();
-    if (!value.startsWith('/') || /[\r\n\0]/.test(value)) { setPathError('Enter an absolute log file path.'); return; }
-    const entry: LogSource = { hostId: addingHost, spec: { kind: 'file', path: value } };
+  addRequestedPath.current = (hostId, value) => {
+    if (!connections.some(connection => connection.host.id === hostId)) return 'This host is no longer available. Reconnect it before adding a log.';
+    if (value.length > 4096 || !value.startsWith('/') || /[\r\n\0]/.test(value)) return 'Enter an absolute log file path.';
+    const entry: LogSource = { hostId, spec: { kind: 'file', path: value } };
     const key = sourceKey(entry);
-    if (!entries.has(key) && known.size >= HISTORY_LIMIT) { setPathError('Too many remembered logs in this session. Reopen a known log or restart the app to clear session history.'); return; }
-    rememberAfterRead.current.add(key); setKnown(previous => new Map(previous).set(key, entry)); setFocused(key); setFilter(''); setAddingHost('');
+    if (!entries.has(key) && known.size >= HISTORY_LIMIT) return 'Too many remembered logs in this session. Reopen a known log or restart the app to clear session history.';
+    rememberAfterRead.current.add(key); setKnown(previous => new Map(previous).set(key, entry)); setFocused(key); setFilter('');
+    selectHost(hostId); setExpanded(previous => new Set([...previous, hostId]));
     // Adding a tree entry grants no read permission. Double-click/Enter starts it.
-  }
+    return null;
+  };
+  useEffect(() => {
+    let alive = true;
+    let unlisten: (() => void) | undefined;
+    void listen<AddLogPathRequest>('log-path-submit', event => {
+      if (!alive) return;
+      const { request_id, host_id, path } = event.payload;
+      const error = addRequestedPath.current(host_id, path);
+      void native.finishLogPath(request_id, error).catch(reason => { if (alive) setPathError(String(reason)); });
+    }).then(stop => { if (alive) { unlisten = stop; setEditorReady(true); } else stop(); }).catch(reason => { if (alive) setPathError(String(reason)); });
+    return () => { alive = false; unlisten?.(); };
+  }, []);
   return <section className="log-navigator" aria-label="Host log navigator">
     <div className="log-navigator-heading"><h2>HOSTS</h2><Button className="sidebar-add" title="Manage connections" aria-label="Manage connections" onClick={manageConnections}>+</Button></div>
     {(connections.length > 3 || entries.size > 6 || filter) && <div className="log-tree-search"><label>Filter hosts or logs<input value={filter} onChange={event => setFilter(event.target.value)} placeholder="Filter hosts or logs…" aria-label="Filter hosts or log paths"/></label>{filter && <Button aria-label="Clear navigator filter" onClick={() => setFilter('')}>×</Button>}</div>}
@@ -118,7 +130,7 @@ export function HostLogTree({ connections, sources, selectedHost, scope, opening
         return <div className="log-tree-host" key={host.id}>
           <div className={'log-tree-host-heading' + (selectedHost === host.id ? ' selected' : '')}>
             <Button className="log-tree-host-toggle" aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${host.target} logs`} aria-expanded={isExpanded} title={`${host.target} · ${host.environment} · ${hostEntries.length} known logs`} onClick={() => { selectHost(host.id); setExpanded(previous => { const next = new Set(previous); if (isExpanded) next.delete(host.id); else next.add(host.id); return next; }); }}><span className="tree-chevron" aria-hidden="true"><Icon name={isExpanded ? 'chevron-down' : 'chevron-right'}/></span><span className={'dot ' + connection.state}/><strong>{host.target}</strong>{host.environment === 'production' && <span className="tree-prod" aria-label="Production" title="Production">●</span>}<span className="tree-log-count">{hostEntries.length}</span></Button>
-            <Button className="log-tree-add" aria-label={`Add log to ${host.target}`} title="Add a log path" onClick={() => startAdding(host.id)}>+</Button>
+            <Button className="log-tree-add" aria-label={`Add log to ${host.target}`} title="Add a log path" disabled={!editorReady} onClick={() => startAdding(host.id)}>+</Button>
           </div>
           {isExpanded && <div className="log-tree-children" role="group" aria-label={`${host.target} logs`}>
             {visible.map(([key, entry]) => {
@@ -128,13 +140,13 @@ export function HostLogTree({ connections, sources, selectedHost, scope, opening
               return <Button className={'log-tree-source' + (reading && scope.includes(reading.id) ? ' active' : '') + (focused === key ? ' focused' : '')} key={key} title={`${sourcePath(entry.spec)}\n${isClosing ? 'Stopping…' : isOpening ? 'Starting…' : reading ? reading.state.replaceAll('_', ' ') : 'Double-click or press Enter to start reading'}`} aria-label={`${sourceLabel(entry.spec)} on ${host.target}${host.environment === 'production' ? ', Production' : ''}${reading ? ', reading' : ', closed'}`} disabled={isOpening || isClosing} onClick={() => { setFocused(key); selectHost(host.id); }} onDoubleClick={() => open(entry)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); open(entry); } }}><span className={'tree-source-state' + (reading ? ' reading' : '')} aria-hidden="true">{isOpening || isClosing ? '…' : <Icon name={entry.spec.kind === 'file' ? 'sources' : entry.spec.kind}/>}</span><span>{sourceLabel(entry.spec)}</span>{reading && <i className={'tree-reading-mark' + (/error|fail|needs_action/i.test(reading.state) ? ' attention' : '')} aria-label={reading.state}/>}</Button>;
             })}
             {!visible.length && <p className="log-tree-empty">{needle ? 'No matching logs' : 'No logs added yet'}</p>}
-            {addingHost === host.id ? <form className="log-tree-path-form" onSubmit={addPath}><label>Add log path<input ref={pathInput} value={path} onChange={event => { setPath(event.target.value); setPathError(''); }} placeholder="/var/log/app.log" maxLength={4096} required aria-label={`New log path for ${host.target}`} onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); setAddingHost(''); } }}/></label><div><Button type="button" onClick={() => setAddingHost('')}>Cancel</Button><Button type="submit" variant="primary" disabled={!path.trim().startsWith('/')}>Add</Button></div>{pathError && <p role="alert">{pathError}</p>}<small>Double-click the added log to start reading.</small></form> : <Button className="log-tree-add-path" onClick={() => startAdding(host.id)}>+ Add log</Button>}
           </div>}
         </div>;
       })}
       {!connections.length && <p className="log-tree-empty">Add a connection to browse its logs.</p>}
       {connections.length > 0 && needle && !connections.some(host => host.host.target.toLowerCase().includes(needle) || [...entries.values()].some(entry => entry.hostId === host.host.id && `${sourcePath(entry.spec)} ${sourceLabel(entry.spec)}`.toLowerCase().includes(needle))) && <p className="log-tree-empty">No matching hosts or logs.</p>}
     </div>
+    {pathError && <p role="alert" className="notice">{pathError}</p>}
     <p className="log-tree-help">Double-click a log to open it.</p>
   </section>;
 }

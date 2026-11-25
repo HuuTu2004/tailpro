@@ -138,6 +138,18 @@ pub struct ConfigImport {
     pub fingerprint: String,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize, TS)]
+pub struct AddLogPathRequest {
+    pub request_id: String,
+    pub host_id: String,
+    pub path: String,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, TS)]
+pub struct AddLogPathResult {
+    pub request_id: String,
+    pub error: Option<String>,
+}
+
 pub fn typescript() -> String {
     let config = ts_rs::Config::default();
     let declarations = [
@@ -165,6 +177,8 @@ pub fn typescript() -> String {
         crate::Explanation::decl(&config),
         Environment::decl(&config),
         HostProfile::decl(&config),
+        AddLogPathRequest::decl(&config),
+        AddLogPathResult::decl(&config),
         ConnectionState::decl(&config),
         ConnectionInfo::decl(&config),
         Access::decl(&config),

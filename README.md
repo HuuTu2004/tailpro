@@ -39,7 +39,7 @@ These workflows have implementation and local validation evidence, with remainin
 ## A typical session
 
 1. **Connect**: click Connections or + beside HOSTS, enter SSH details, and press Connect. Saved profiles can be selected in the same form; Test connection is optional.
-2. **Add a log** using the + next to a host and enter its absolute file path.
+2. **Add a log** using the + next to a host, enter its absolute file path in the separate Add log window, and press Add.
 3. **Start** the sources you want to follow.
 4. **Filter and inspect** events; pause the viewport when you need to read.
 5. **Export** a previewed, redacted incident or grant a compatible MCP client access to selected sources.
