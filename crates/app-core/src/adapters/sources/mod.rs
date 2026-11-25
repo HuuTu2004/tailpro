@@ -67,14 +67,21 @@ fn python(script: &str, args: &Value) -> String {
     )
 }
 
-pub(crate) async fn inspect(session:&crate::adapters::ssh::Session,operation:RemoteOperation,cancel:&tokio_util::sync::CancellationToken)->Result<Value> {
-    let _permit=tokio::select!{_=cancel.cancelled()=>return Err(Error::Cancelled),p=session.probes.clone().acquire_owned()=>p.map_err(|_|Error::Cancelled)?};
-    let mut channel=session.spawn(operation).await?;
-    let stdout=channel.child.stdout.take().unwrap();let stderr=channel.child.stderr.take().unwrap();
-    let diagnostic=tokio::spawn(crate::adapters::ssh::bounded_read(stderr,4096));
-    let result=tokio::select!{
+pub(crate) async fn inspect(
+    session: &crate::adapters::ssh::Session,
+    operation: RemoteOperation,
+    cancel: &tokio_util::sync::CancellationToken,
+) -> Result<Value> {
+    let _permit = tokio::select! {_=cancel.cancelled()=>return Err(Error::Cancelled),p=session.probes.clone().acquire_owned()=>p.map_err(|_|Error::Cancelled)?};
+    let mut channel = session.spawn(operation).await?;
+    let stdout = channel.child.stdout.take().unwrap();
+    let stderr = channel.child.stderr.take().unwrap();
+    let diagnostic = tokio::spawn(crate::adapters::ssh::bounded_read(stderr, 4096));
+    let result = tokio::select! {
         _=cancel.cancelled()=>Err(Error::Cancelled),_=session.cancel.cancelled()=>Err(Error::Cancelled),
         r=tokio::time::timeout(std::time::Duration::from_secs(15),crate::adapters::ssh::bounded_read(stdout,32*1024))=>r.map_err(|_|Error::Timeout).and_then(|r|r).and_then(|bytes|serde_json::from_slice(&bytes).map_err(Error::from))
     };
-    channel.close().await;diagnostic.abort();result
+    channel.close().await;
+    diagnostic.abort();
+    result
 }

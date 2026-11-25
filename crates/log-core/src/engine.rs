@@ -74,39 +74,11 @@ pub struct Snapshot {
     pub fence: u64,
     pub watermark: u64,
     pub source_losses: BTreeMap<String, u64>,
-    pub source_metrics: BTreeMap<String,crate::model::IngestionMetrics>,
+    pub source_metrics: BTreeMap<String, crate::model::IngestionMetrics>,
     until: Instant,
     slots: Arc<AtomicUsize>,
 }
 impl Snapshot {
-    /// Read a bounded suffix per source, then merge by local ingest order.
-    pub fn recent(&self, limit: usize) -> Result<Vec<&Event>, Error> {
-        if Instant::now() > self.until {
-            return Err(Error::Expired);
-        }
-        if limit > 200 {
-            return Err(Error::LeaseLimit);
-        }
-        let mut counts = BTreeMap::<&str, usize>::new();
-        let mut events = Vec::new();
-        for segment in self.segments.iter().rev() {
-            let Some(first) = segment.events.first() else {
-                continue;
-            };
-            let count = counts.entry(first.source.as_str()).or_default();
-            if *count >= limit {
-                continue;
-            }
-            for event in segment.events.iter().rev().take(limit - *count) {
-                events.push(event);
-                *count += 1;
-            }
-        }
-        events.sort_unstable_by_key(|e| std::cmp::Reverse(e.sequence));
-        events.truncate(limit);
-        events.reverse();
-        Ok(events)
-    }
     pub fn events(&self) -> Result<impl Iterator<Item = &Event>, Error> {
         if Instant::now() > self.until {
             return Err(Error::Expired);
@@ -234,13 +206,30 @@ impl Engine {
         {
             return Err(Error::Stale);
         }
-        let raw_bytes=(event.raw.bytes().len()+event.ending.bytes().len()) as u64;
-        let m=&mut self.sources.get_mut(&source).unwrap().metrics;
-        m.admission_units=m.admission_units.saturating_add(1);
-        m.observed_bytes=m.observed_bytes.saturating_add(raw_bytes);
-        m.physical_records=m.physical_records.saturating_add(if !event.checkpoint_complete||matches!(event.ending,crate::model::RecordEnding::Fragment|crate::model::RecordEnding::Interrupted){0}else{event.physical.len() as u64});
-        m.raw_fallback+=u64::from(matches!(event.evidence.decoder,crate::model::evidence::Decoder::Raw));
-        m.malformed+=u64::from(event.quality.malformed);m.encoding_loss+=u64::from(event.quality.lossy_utf8);m.conflicts+=u64::from(event.evidence.conflict);m.fragments+=u64::from(event.fragment.is_some());
+        let raw_bytes = (event.raw.bytes().len() + event.ending.bytes().len()) as u64;
+        let m = &mut self.sources.get_mut(&source).unwrap().metrics;
+        m.admission_units = m.admission_units.saturating_add(1);
+        m.observed_bytes = m.observed_bytes.saturating_add(raw_bytes);
+        m.physical_records = m.physical_records.saturating_add(
+            if !event.checkpoint_complete
+                || matches!(
+                    event.ending,
+                    crate::model::RecordEnding::Fragment | crate::model::RecordEnding::Interrupted
+                )
+            {
+                0
+            } else {
+                event.physical.len() as u64
+            },
+        );
+        m.raw_fallback += u64::from(matches!(
+            event.evidence.decoder,
+            crate::model::evidence::Decoder::Raw
+        ));
+        m.malformed += u64::from(event.quality.malformed);
+        m.encoding_loss += u64::from(event.quality.lossy_utf8);
+        m.conflicts += u64::from(event.evidence.conflict);
+        m.fragments += u64::from(event.fragment.is_some());
         // Continuity markers must survive filtered reads as coverage metadata.
         // A level:error/trace predicate may exclude the marker itself.
         if event.stream == crate::model::Stream::System && event.quality.uncertain {
@@ -253,30 +242,63 @@ impl Engine {
         // Reserve slack for vector growth, Arc, deque/weak bookkeeping and journal metadata.
         let bytes = event.charged_bytes() + std::mem::size_of::<Event>() + 256;
         while !self.fits(&source, bytes) {
-            let store = self.sources.get_mut(&source).unwrap();
-            store.seal();
-            if !store.removable(SOURCE_FLOOR, ROW_FLOOR) {
+            let own = self.sources.get_mut(&source).unwrap();
+            own.seal();
+            let victim = if own.removable(SOURCE_FLOOR, ROW_FLOOR) {
+                Some(source.clone())
+            } else if own.resident_bytes() > own.live_bytes() {
+                // Pinned bytes belong to the producer that incurred pressure.
+                // Do not drain unrelated sources to finance its expired leases.
+                None
+            } else {
+                // At a protected straddling segment, the producer cannot reclaim
+                // even one unit of its floor. Reclaim the largest unpinned excess
+                // borrower instead, preserving every source's protected suffix.
+                self.sources
+                    .iter()
+                    .filter(|(_, store)| {
+                        store.removable(SOURCE_FLOOR, ROW_FLOOR)
+                            && store
+                                .sealed
+                                .front()
+                                .is_some_and(|s| Arc::strong_count(s) == 1)
+                    })
+                    .max_by_key(|(_, store)| store.live_bytes().saturating_sub(SOURCE_FLOOR))
+                    .map(|(id, _)| id.clone())
+            };
+            let Some(victim) = victim else {
                 self.counters.discarded += event.physical.len() as u64;
-                let m=&mut self.sources.get_mut(&source).unwrap().metrics;m.gap_units+=1;m.gap_bytes=m.gap_bytes.saturating_add(raw_bytes);
+                let m = &mut self.sources.get_mut(&source).unwrap().metrics;
+                m.gap_units += 1;
+                m.gap_bytes = m.gap_bytes.saturating_add(raw_bytes);
                 self.change(&source, ChangeKind::Gap);
                 return Ok(Ack {
                     generation,
                     physical: event.physical,
                     disposition: Disposition::Gap,
                 });
-            }
+            };
+            let store = self.sources.get_mut(&victim).unwrap();
             let removed = store.sealed.pop_front().unwrap();
             store.rows -= removed.events.len();
-            store.metrics.retention_evicted_bytes=store.metrics.retention_evicted_bytes.saturating_add(removed.events.iter().map(|e|(e.raw.bytes().len()+e.ending.bytes().len()) as u64).sum::<u64>());
+            store.metrics.retention_evicted_bytes =
+                store.metrics.retention_evicted_bytes.saturating_add(
+                    removed
+                        .events
+                        .iter()
+                        .map(|e| (e.raw.bytes().len() + e.ending.bytes().len()) as u64)
+                        .sum::<u64>(),
+                );
             self.counters.evicted += removed.events.len() as u64;
             drop(removed);
-            self.change(&source, ChangeKind::Evict);
+            self.change(&victim, ChangeKind::Evict);
         }
         let physical = event.physical.clone();
         let store = self.sources.get_mut(&source).unwrap();
         store.resident.fetch_add(bytes, Ordering::Relaxed);
         store.tail_bytes += bytes;
-        store.metrics.accepted_units+=1;store.metrics.represented_bytes=store.metrics.represented_bytes.saturating_add(raw_bytes);
+        store.metrics.accepted_units += 1;
+        store.metrics.represented_bytes = store.metrics.represented_bytes.saturating_add(raw_bytes);
         store.tail.push(event);
         store.rows += 1;
         if store.tail_bytes >= SEGMENT_BYTES || store.tail.len() >= SEGMENT_ROWS {
@@ -369,7 +391,11 @@ impl Engine {
             fence: self.revision,
             watermark: self.sequence,
             source_losses: self.source_losses.clone(),
-            source_metrics: self.sources.iter().map(|(id,s)|(id.clone(),s.metrics.clone())).collect(),
+            source_metrics: self
+                .sources
+                .iter()
+                .map(|(id, s)| (id.clone(), s.metrics.clone()))
+                .collect(),
             until: Instant::now() + Duration::from_secs(60),
             slots: self.leases.clone(),
         })

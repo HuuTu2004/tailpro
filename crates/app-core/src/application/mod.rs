@@ -3,9 +3,9 @@ pub mod bridge;
 mod connection_profiles;
 mod explainer;
 mod output;
+mod parsing;
 pub mod policy;
 mod production;
-mod parsing;
 pub mod redaction;
 mod topology;
 mod views;
@@ -260,13 +260,39 @@ impl AppHandle {
             }
             SourceSpec::File { path } => policy::path(path)?,
             SourceSpec::Journal { unit } => policy::unit(unit)?,
-            SourceSpec::Kubernetes { kubeconfig, context,namespace,pod,pod_uid,container,container_id,config_digest,trusted,.. } => {
+            SourceSpec::Kubernetes {
+                kubeconfig,
+                context,
+                namespace,
+                pod,
+                pod_uid,
+                container,
+                container_id,
+                config_digest,
+                trusted,
+                ..
+            } => {
                 policy::path(kubeconfig)?;
-                for value in [context,namespace,pod,pod_uid,container,container_id] {
-                    if value.is_empty()||value.len()>253||value.starts_with('-')||value.chars().any(|c|c.is_whitespace()||c.is_control()) {return Err(Error::Invalid("Invalid Kubernetes selected identity".into()));}
+                for value in [context, namespace, pod, pod_uid, container, container_id] {
+                    if value.is_empty()
+                        || value.len() > 253
+                        || value.starts_with('-')
+                        || value.chars().any(|c| c.is_whitespace() || c.is_control())
+                    {
+                        return Err(Error::Invalid(
+                            "Invalid Kubernetes selected identity".into(),
+                        ));
+                    }
                 }
-                if !trusted||config_digest.len()!=64||!config_digest.bytes().all(|b|b.is_ascii_hexdigit()){return Err(Error::NeedsAction("Inspect and trust the selected Kubernetes context first".into()));}
-            },
+                if !trusted
+                    || config_digest.len() != 64
+                    || !config_digest.bytes().all(|b| b.is_ascii_hexdigit())
+                {
+                    return Err(Error::NeedsAction(
+                        "Inspect and trust the selected Kubernetes context first".into(),
+                    ));
+                }
+            }
         }
         let (sessions, cancel, profile) = {
             let mut state = self.state.lock().unwrap();
@@ -303,7 +329,7 @@ impl AppHandle {
             detail: None,
             generation: generation.to_string(),
         }));
-        let parser=ingest.parser.clone();
+        let parser = ingest.parser.clone();
         let reader = Reader {
             source: id.clone(),
             generation,
@@ -325,11 +351,15 @@ impl AppHandle {
             },
         );
         let task = tokio::spawn(sources::run(reader));
-        self.state
-            .lock()
-            .unwrap()
-            .sources
-            .insert(id.clone(), Source { info, cancel, task, parser });
+        self.state.lock().unwrap().sources.insert(
+            id.clone(),
+            Source {
+                info,
+                cancel,
+                task,
+                parser,
+            },
+        );
         Ok(id)
     }
     pub async fn stop_source(&self, source_id: &str) -> Result<()> {
@@ -383,21 +413,6 @@ impl AppHandle {
             path: path.into(),
         });
         store.save(&saved)
-    }
-    pub async fn preview(&self) -> Result<Preview> {
-        let mut preview = self.engine.preview().await?;
-        let state = self.state.lock().unwrap();
-        preview.events.retain_mut(|event| {
-            if let Some(context) = state.contexts.get(&event.source) {
-                event.host = context.host.target.clone();
-                event.environment = context.host.environment.clone();
-                true
-            } else {
-                preview.complete = false;
-                false
-            }
-        });
-        Ok(preview)
     }
     pub fn cancel_discovery(&self, host_id: &str) {
         if let Some(host) = self.state.lock().unwrap().hosts.get_mut(host_id) {
@@ -527,6 +542,3 @@ async fn connection_loop(
     }
     info.lock().unwrap().state = ConnectionState::Disconnected;
 }
-
-#[cfg(feature = "manual-fixtures")]
-mod manual;

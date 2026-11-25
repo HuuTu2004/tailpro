@@ -71,7 +71,7 @@ crates/
     diagnostics/             # scrubbed metadata/counters
   app-protocol/              # wire DTOs/version, TS/read schemas; không runtime
   mcp-adapter/               # pinned rmcp + local bridge client; không engine/SSH
-fixtures/                    # synthetic sample logs/config; không secret thật
+
 tools/                       # contract export, manual profiling/support tools
 ```
 
@@ -79,7 +79,7 @@ Phase 1 chỉ tạo hai library lõi và desktop; phase 3 mới extract DTO sang
 
 ## Ownership và Interface
 
-Phase6.1 có [`log-core/model/ingestion.rs`](../../crates/log-core/src/model/ingestion.rs) làm checked domain primitives cho [schema v1](ingestion-schema.md). Các view borrow bytes/decimal timestamps, không thêm per-event allocations hoặc I/O; admission `Disposition` dùng chung model/engine qua re-export tương thích. Đây là foundation, chưa thay runtime representation hoặc desktop/MCP wire; ownership/charging khi migrate theo schema contract và6.2–6.3.
+Phase6.1 có [`log-core/model/ingestion.rs`](../../crates/log-core/src/model/ingestion.rs) làm checked domain primitives cho [schema v1](ingestion-schema.md). Các view borrow bytes/decimal timestamps, không thêm per-event allocations hoặc I/O; admission `Disposition` dùng chung model/engine qua re-export tương thích. Foundation được migrate trong6.2–6.8: `model/payload` sở hữu original bytes, display overlay chỉ cho invalid UTF-8; `parse/decode` dùng borrowed RawValue/logfmt scanner và deterministic mapper, `parse/header` bounded profiles. `workers/parser` compile config ngoài live executor; `application/parsing` explicit source-session preview/apply. `sources/kubernetes_helper.py` dùng selected scope và sealed memfd config; capability/giới hạn ở [decision](kubernetes-ingestion-decision.md). Raw/dynamic evidence/links đều charge vào store; TS regenerate khi DTO additive fields thay đổi.
 
 | Module | Sở hữu | Callers biết |
 | --- | --- | --- |
@@ -131,13 +131,13 @@ sum(L_i) + sum(max(0,10000-L_i)) <=500000
 U_ui + U_bg + max(0,16MiB-U_ui) <=64MiB
 ```
 
-Unused reservations không được hot source/background mượn. Evict excess của nguồn gây pressure trước; không FIFO toàn cục xóa quiet suffix. Segment straddle cutoff: giữ charged slack hoặc compact sau khi reserve cả old+new peak. Start nguồn mới cần reservation trước; stopped source grace60s tính trong source slots. Khi chưa reclaim được pinned excess thì từ chối input nguồn gây pressure với gap, không phá quiet reservation.
+Unused reservations không được hot source/background mượn. Evict excess của nguồn gây pressure trước; khi source ở protected straddling segment và không có pinned excess, thu hồi segment chưa pin của borrower có live excess lớn nhất. Mọi protected suffix/floor vẫn giữ; pinned pressure vẫn thuộc source gây ra nó. Không FIFO toàn cục xóa quiet suffix. Segment straddle cutoff: giữ charged slack hoặc compact sau khi reserve cả old+new peak. Start nguồn mới cần reservation trước; stopped source grace60s tính trong source slots. Khi chưa reclaim được pinned excess thì từ chối input nguồn gây pressure với gap, không phá quiet reservation.
 
 UI có reserved CPU/memory nhưng không vô hạn: supersede/release generations cũ trước query mới, round-robin giữa views. GUI heap/allocator không hard-cap được bằng logical bytes; RSS và failure behavior phải đo theo [plan](../plan/roadmap.md).
 
 ## Chính sách mở rộng feature
 
-Viewer chọn nguồn qua `SourcePicker`: mỗi host có một hàng ô nguồn, All tổng hợp theo host, Combine sources chọn nhiều nguồn để gộp vào cùng paged view. App giữ riêng host scope và danh sách source IDs tường minh; host scope cập nhật khi status có nguồn mới, còn đổi scope trong lúc Start đang chạy ngăn kết quả Start ghi đè lựa chọn mới. Add path gọi existing typed `start_source` sau Start & view, không thêm remote command hoặc quyền discovery; Discover sources chỉ mở đúng host/tab, người dùng vẫn phải bấm Discover. Columns và source health nằm ngoài các ô chọn nguồn. Layout cho phép bảng và scrollbar co theo chiều cao cửa sổ; danh sách host có vùng cuộn riêng.
+Viewer điều hướng qua `HostLogTree` và `SourceTabs`: cây host/log ở sidebar, tab tương ứng reader đang chạy ở trên bảng; bỏ panel hàng nguồn cũ. Cây nhớ tối đa128 descriptor của phiên và đọc tối đa100 pinned paths/host qua API hiện có; nodes thu gọn và tìm kiếm khi nhiều host/log. Thêm path chỉ tạo descriptor, double-click/Enter mới gọi typed `start_source`; reader đang mở được activate thay vì tạo trùng, in-flight Start có guard theo physical source key. Alias Docker không thay identity reader. × gọi `stop_source`, chỉ bỏ tab sau Stop thành công; failure giữ tab/reader và báo lỗi. Chuyển tab chỉ đổi query scope. Combine chọn explicit source IDs đang mở, không tự thêm nguồn mới vào nhóm. Khi đóng hết readers, LiveView đóng view/cancel owned work và không query với empty scope mang nghĩa all. Đổi tab reset anchor/pause cho nguồn mới; cache/page/detail budgets vẫn giữ. File mới chỉ pin sau streaming theo native policy, còn descriptor Docker/Journal/Kubernetes đã đóng được nhớ trong phiên. Không tự Connect/Discover/đọc file khi mở cây; Sources/Columns/health vẫn dùng các API và quyền hiện có.
 
 Desktop dùng một runtime cho cửa sổ log chính và các cửa sổ hệ điều hành độc lập `connections-manager`, `settings-manager`, `connection-editor`. Mỗi cửa sổ có decorations, move/resize/minimize/maximize/close của hệ điều hành; New connection không còn là HTML dialog. Mỗi nút chỉ mở hoặc focus đúng cửa sổ của chức năng đó; không gộp hai chức năng vào một window. Trang chính chỉ có mục Connections; form, Settings và thông tin SSH nâng cao không xếp trên bảng log. Cửa sổ quản lý mở qua native command với route/label allowlist, không cấp quyền tạo webview hoặc mở URL tùy ý từ frontend. Export/Explain vẫn thuộc cửa sổ chính; grants/provider/mappings cho phép thêm đúng Settings window, còn test/save profile thuộc Connections/New connection windows. Save gửi thông báo cập nhật danh sách profile và đóng editor; Cancel/OS close hủy test và bỏ bản nháp. Đóng cửa sổ quản lý không disconnect hoặc Stop nguồn.
 
@@ -167,7 +167,7 @@ Frontend giữ tối đa 10 pages/2000 rows/24 MiB estimated logical charge, Ins
 
 `app-protocol` sở hữu desktop/output/read contracts; app-core re-export API, TypeScript/read JSON Schema generate từ Rust. `application/redaction.rs` là sanitized projection chung trước predicates và output. `output.rs` giữ grant/epoch/prepared bytes; `agent_context.rs` giữ bounded refs/cursors và read semantics; `bridge.rs` giữ Unix ownership/lifecycle cùng native atomic file publish; `explainer.rs` giữ optional provider/OS-secret-store policy. Desktop là composition root cho bridge; adapter executable chỉ nối app đang chạy, không link engine/SSH.
 
-Grants/providers không persist, inference tắt mặc định. Export/AI thuộc bundled main-window principal và exact prepared bytes, không thêm MCP export/exec tools. Background read reuse CPU/background permits; một lane output, hai protocol requests/adapter, bounded socket/frame/results/registries. Alpha caps thấp hơn ceilings: export 2 MiB, bridge response 256 KiB, refs 1536 và cursors 64 KiB; giữ chỗ cho UI trong cùng ngân sách chuẩn. Manual source seeding chỉ có qua opt-in `manual-fixtures` trong manually invoked examples, không có trong desktop/default features/wire API.
+Grants/providers không persist, inference tắt mặc định. Export/AI thuộc bundled main-window principal và exact prepared bytes, không thêm MCP export/exec tools. Background read reuse CPU/background permits; một lane output, hai protocol requests/adapter, bounded socket/frame/results/registries. Alpha caps thấp hơn ceilings: export 2 MiB, bridge response 256 KiB, refs 1536 và cursors 64 KiB; giữ chỗ cho UI trong cùng ngân sách chuẩn. Runtime chỉ nhận log từ adapter đã được user Start; synthetic source seeding, demo IPC và manual-fixtures đã được loại bỏ. Contract generator thuộc app-protocol và chạy bằng `npm run contracts`.
 
 MCP SDK pin `rmcp=0.8.5`, negotiated revision 2025-06-18; compatibility evidence Codex CLI 0.170.0/Claude Code 2.1.304 và các gate còn lại ở [phase 3 acceptance](../process/phase-03-acceptance.md). Counts/predicates/enrichment không được lấy từ secret raw fields. Log/model output luôn là untrusted evidence; absence/gaps không xác nhận fix/deployment. Không suy logical caps thành RSS/shared-memory certification khi chưa đo.
 

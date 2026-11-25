@@ -1,13 +1,12 @@
 import { IncidentExport } from '../export/IncidentExport';
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react';
 import { native } from '../../shared/client/native';
 import type { AppStatus, ViewNotice, ViewPage, ViewRow } from '../../shared/contracts/generated';
 import { QueryBar } from '../query/QueryBar';
 import { Inspector } from '../inspector/Inspector';
 import { ResizableViewer } from './ResizableViewer';
-import { SourcePicker } from './SourcePicker';
 import './workspace.css';
-type Props = { onGetStarted?: () => void; status?: AppStatus; scope: string[]; setScope: (ids: string[]) => void; scopeHost: string | null; selectHostLogs: (hostId: string) => void; addLogPath: (hostId: string, path: string, combine: boolean) => Promise<void>; manageSources: (hostId: string) => void; queryInput: RefObject<HTMLInputElement | null>; viewport: RefObject<HTMLDivElement | null>; active?: boolean; onInspect?: () => void; inspectorVisible?: boolean };
+type Props = { onGetStarted?: () => void; status?: AppStatus; scope: string[]; sourceTabs: ReactNode; reading: boolean; queryInput: RefObject<HTMLInputElement | null>; viewport: RefObject<HTMLDivElement | null>; active?: boolean; onInspect?: () => void; inspectorVisible?: boolean };
 const HEIGHT = 36;
 const columns = ['time', 'server', 'source', 'level', 'message', 'trace_id', 'duration_ms'] as const;
 type Column = typeof columns[number];
@@ -24,7 +23,7 @@ function messageWidth(page: ViewPage) {
   return width;
 }
 function bytes(page: ViewPage) { const cached = pageSizes.get(page); if (cached !== undefined) return cached; const size = JSON.stringify(page).length * 2 + page.events.length * 512; pageSizes.set(page, size); return size; }
-export function LiveView({ onGetStarted, status, scope, setScope, scopeHost, selectHostLogs, addLogPath, manageSources, queryInput, viewport, active = true, onInspect, inspectorVisible = true }: Props) {
+export function LiveView({ onGetStarted, status, scope, sourceTabs, reading, queryInput, viewport, active = true, onInspect, inspectorVisible = true }: Props) {
   const [viewId, setViewId] = useState('');
   const [session, setSession] = useState(0);
   const [query, setQuery] = useState('');
@@ -59,7 +58,7 @@ export function LiveView({ onGetStarted, status, scope, setScope, scopeHost, sel
   const current = useRef({ query, scope, viewId }); current.current = { query, scope, viewId };
   const fetchRef = useRef<(kind?: 'reset' | 'older' | 'verify') => Promise<void>>(async () => {});
   const configKey = JSON.stringify(scope);
-  useEffect(() => { setSelection(''); setActiveRow(''); }, [configKey]);
+  useEffect(() => { setSelection(''); setActiveRow(''); pausedRef.current = false; setPaused(false); setArrivals('0'); anchor.current = null; readingAnchor.current = null; needsVerify.current = false; }, [configKey]);
   const nextDetail = useCallback(() => ++detailGeneration.current, []);
   const rowName = (row: ViewRow) => {
     const source = status?.sources.find(s => s.id === row.source);
@@ -92,7 +91,7 @@ export function LiveView({ onGetStarted, status, scope, setScope, scopeHost, sel
   }
   fetchRef.current = async (kind = 'reset') => {
     const config = current.current;
-    if (!config.viewId) return;
+    if (!config.viewId || !reading) return;
     const before = kind === 'older' ? pagesRef.current[0]?.older_cursor ?? null : null;
     if (kind === 'older' && !before) return;
     const requestEpoch = epoch.current;
@@ -125,6 +124,7 @@ export function LiveView({ onGetStarted, status, scope, setScope, scopeHost, sel
   };
   useEffect(() => {
     setViewId(''); setPages([]); pagesRef.current = []; pageRevision.current = ''; noticeRef.current = undefined; setNotice(undefined); setSelection(''); setError('');
+    if (!reading) { generation.current++; inFlight.current = false; setBusy(false); setExpired(false); return; }
     let alive = true; let id = ''; let timer: ReturnType<typeof setTimeout>;
     let ack: string | null = null;
     async function poll() {
@@ -148,7 +148,7 @@ export function LiveView({ onGetStarted, status, scope, setScope, scopeHost, sel
     }
     native.openView().then(opened => { id = opened; if (!alive) { void native.closeView(id).catch(() => {}); return; } setViewId(id); void poll(); }).catch(e => { if (alive) setError(String(e)); });
     return () => { alive = false; clearTimeout(timer); generation.current++; if (id) void native.closeView(id).catch(() => {}); };
-  }, [session]);
+  }, [session, reading]);
   useEffect(() => {
     epoch.current++; generation.current++; inFlight.current = true; debounceUntil.current = performance.now() + 150;
     const timer = setTimeout(() => { void fetchRef.current(); }, 150);
@@ -184,14 +184,15 @@ export function LiveView({ onGetStarted, status, scope, setScope, scopeHost, sel
     window.addEventListener('keydown', escape); return () => window.removeEventListener('keydown', escape);
   }, [selection, closeInspector, active, inspectorVisible]);
   return <section className="live-view" aria-label="Multi-source live logs">
-    <div className="viewer-toolbar"><div className="section-heading log-toolbar"><h2>Live logs <span className={`badge ${paused ? 'paused' : 'following'}`}>{!status?.sources.length ? 'Ready' : paused ? 'Paused' : 'Live'}</span></h2><div className="actions"><button disabled={!viewId} title={paused ? 'Resume live' : 'Pause viewport · Space'} onClick={() => paused ? resume() : pause()}>{paused ? `Resume · ${arrivals} new` : 'Pause'}</button>{paused && <button disabled={!viewId} onClick={resume}>Jump to live</button>}<button disabled={!activeRow} aria-expanded={Boolean(selection && inspectorVisible)} aria-controls="event-details-panel" onClick={() => { if (selection && inspectorVisible) closeInspector(); else { pause(); onInspect?.(); setSelection(activeRow); } }}>{selection && inspectorVisible ? 'Hide details' : 'Details'}</button><IncidentExport sources={scope.length ? scope : status?.sources.map(s => s.id) ?? []} query={query}/></div></div>
+    {sourceTabs}
+    <div className="viewer-toolbar"><div className="section-heading log-toolbar"><h2>Live logs <span className={`badge ${paused ? 'paused' : 'following'}`}>{!reading ? 'Ready' : paused ? 'Paused' : 'Live'}</span></h2><div className="actions"><button disabled={!viewId} title={paused ? 'Resume live' : 'Pause viewport · Space'} onClick={() => paused ? resume() : pause()}>{paused ? `Resume · ${arrivals} new` : 'Pause'}</button>{paused && <button disabled={!viewId} onClick={resume}>Jump to live</button>}<button disabled={!activeRow} aria-expanded={Boolean(selection && inspectorVisible)} aria-controls="event-details-panel" onClick={() => { if (selection && inspectorVisible) closeInspector(); else { pause(); onInspect?.(); setSelection(activeRow); } }}>{selection && inspectorVisible ? 'Hide details' : 'Details'}</button><IncidentExport sources={scope.length ? scope : status?.sources.map(s => s.id) ?? []} query={query}/></div></div>
     <QueryBar value={query} change={value => { if (value !== query) { epoch.current++; generation.current++; setQuery(value); } }} input={queryInput}/></div>
-    <SourcePicker status={status} scope={scope} scopeHost={scopeHost} setScope={setScope} selectHost={selectHostLogs} addPath={addLogPath} manageSources={manageSources}/>
     <div className="view-context-row"><details className="view-options"><summary>Columns</summary><div className="view-option-content"><h3>Visible columns</h3><div className="check-row">{columns.map(c => <label key={c}><input type="checkbox" checked={shown.includes(c)} disabled={c === 'message'} onChange={e => setShown(columns.filter(column => column === c ? e.target.checked : shown.includes(column)))}/>{columnLabels[c]}</label>)}</div></div></details>
     <details className="source-health-menu"><summary>Source status <span className="status-count">{status?.sources.length ?? 0}</span>{status?.sources.some(s => /reconnect|error|fail|needs_action/i.test(s.state)) && <span className="status-attention">Needs attention</span>}</summary><div className="source-health" aria-label="Source health outside query filters">{status?.sources.map(s => { const host = status.connections.find(c => c.host.id === s.host_id); const name = s.spec.kind === 'file' ? s.spec.path : s.spec.kind === 'journal' ? s.spec.unit : s.spec.kind === 'kubernetes' ? `${s.spec.namespace}/${s.spec.pod}/${s.spec.container}` : s.spec.container_id; return <span key={s.id} className={`health-chip ${host?.host.environment ?? ''}`} title={`${host?.host.target} / ${name} · ${s.id} · ${s.detail ?? s.state}`} style={{ borderLeftColor: color(s.id) }}>{host?.host.target} / {name.split('/').at(-1)} · {s.state}{host?.host.environment === 'production' && <b className="badge production">Production</b>}</span>; })}{!status?.sources.length && <span className="hint">Start a log source to begin.</span>}</div></details></div>
     {scope.some(id => !status?.sources.some(s => s.id === id)) && <p className="notice">This filter includes unavailable source IDs. Restore does not start or grant sources.</p>}
     {notice && (notice.discarded !== '0' || notice.evicted !== '0' || !notice.complete || notice.gap_sources.length > 0) && <p className="hint retention-summary" aria-live="off">{notice.discarded} discarded · {notice.evicted} evicted{!notice.complete && ' · Catch-up incomplete; current snapshot reloaded'}{notice.gap_sources.length > 0 && ` · Gaps: ${notice.gap_sources.join(', ')}`}</p>}
     {error && <p role="alert" className="notice">{error}{error.includes('View expired') && <button onClick={() => { pausedRef.current = false; setPaused(false); anchor.current = null; setSession(n => n + 1); }}>Reopen viewer</button>}{expired && <button onClick={() => { anchor.current = null; readingAnchor.current = null; needsVerify.current = false; setExpired(false); void fetchRef.current(); }}>Reload retained logs</button>}</p>}
+    {pages.some(p => p.gap_sources?.length) && <p className="notice">Source gaps or retention loss affect this window: {[...new Set(pages.flatMap(p => p.gap_sources ?? []))].join(', ')}. Zero matches do not establish absence.</p>}
     {pages.some(p => !p.complete || p.truncated) && <p className="notice">Results are bounded/partial. {pages.some(p => p.truncated) ? 'Page reached the byte cap; continue with older pages.' : 'Scan deadline reached; narrow the query.'}</p>}
     <ResizableViewer side="right" panel={selection && viewId && inspectorVisible ? <Inspector active={active} sources={scope.length ? scope : status?.sources.map(s => s.id) ?? []} viewId={viewId} eventId={selection} nextGeneration={nextDetail} close={closeInspector} select={setSelection}/> : null}><div className="table-area"><div className="paging"><button disabled={busy || !pages[0]?.older_cursor || expired} onClick={() => { pause(); void fetchRef.current('older'); }}>Load older page</button><span role="status">{busy ? 'Reading…' : `${rows.length} cached rows / 2000`}{paused && ` · ${arrivals} new events across sources`}</span></div>
       <div className="log-viewport" ref={viewport} tabIndex={0} role="grid" aria-label="Log events. Space pauses, arrows select, Enter inspects" aria-rowcount={rows.length + 1} aria-colcount={shown.length} aria-activedescendant={activeRow && rows.slice(start, end).some(r => r.id === activeRow) ? `event-${activeRow}` : undefined}
@@ -211,7 +212,7 @@ export function LiveView({ onGetStarted, status, scope, setScope, scopeHost, sel
               {c === 'source' ? <span className="source-badge" title={`${rowName(row)} · ${row.source}`} style={{ color: color(row.source) }}>{rowName(row).split('/').at(-1)}</span> : c === 'server' ? <span aria-label={`${row.server}, ${environmentFor(row)}`}>{row.server}{environmentFor(row) === 'production' && <b className="prod-dot" title="Production" aria-label="Production">●</b>}</span> : c === 'level' ? <span className={`level ${row.level.toLowerCase()}`}>{row.level}</span> : c === 'time' ? row.time_basis === 'local_observed_at' ? new Date(Number(row.time)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, fractionalSecondDigits: 3 }) : row.time : c === 'trace_id' ? row.trace_id ?? '—' : c === 'duration_ms' ? row.duration_ms ?? '—' : row.message}
             </div>)}
           </div>)}
-        </div>{rows.length === 0 && !busy && <div className="empty log-empty"><h3>{status?.sources.length ? 'No matching retained logs' : 'No logs yet'}</h3><p>{status?.sources.length ? 'Try a different query or source selection.' : 'Connect a host and add a source to start reading.'}</p>{!status?.sources.length && onGetStarted && <button className="primary" onClick={onGetStarted}>{status?.connections.length ? 'Add source' : 'Add connection'}</button>}</div>}
+        </div>{rows.length === 0 && !busy && <div className="empty log-empty"><h3>{reading ? 'No matching retained logs' : 'Open a log to start'}</h3><p>{reading ? 'Try a different query or source selection.' : 'Expand a host on the left, then double-click a log. Add a path with the + next to its host.'}</p>{!status?.sources.length && onGetStarted && <button className="primary" onClick={onGetStarted}>{status?.connections.length ? 'Add source' : 'Add connection'}</button>}</div>}
       </div><div className="log-horizontal-scroll"><input className="log-horizontal-slider" type="range" min={0} max={horizontalMax} step={1} value={Math.min(horizontalScroll, horizontalMax)} disabled={!horizontalMax} aria-label="Scroll log messages horizontally" style={{ '--scroll-thumb-width': scrollThumbWidth } as CSSProperties} onChange={event => { const offset = Number(event.target.value); setHorizontalScroll(offset); if (viewport.current) viewport.current.scrollLeft = offset; }}/></div><details className="viewer-metrics"><summary>Viewer measurements</summary>{notice && <p className="hint">{notice.retained_rows} retained · {(Number(notice.resident_bytes) / 1024 / 1024).toFixed(1)} MiB charged · {notice.discarded} discarded · {notice.evicted} evicted</p>}<p className="hint">Frame interval p95 (last 180): {frame95.toFixed(1)} ms · Rust job {(Number(metrics.coreUs) / 1000).toFixed(1)} ms · IPC E2E {metrics.ipcMs.toFixed(1)} ms · Serialized page {metrics.pageBytes} B · Cache {Math.round(pages.reduce((n, p) => n + bytes(p), 0) / 1024)} KiB. Frame samples include idle time; use a scroll session for acceptance. New arrivals count all sources, independent of the query.</p></details>
     </div></ResizableViewer>
   </section>;

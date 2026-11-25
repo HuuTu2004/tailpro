@@ -82,14 +82,14 @@ try:
         statuses=pod.get('status',{}).get('containerStatuses',[])
         status=next((s for s in statuses if s.get('name')==p['container']),None)
         if status is None or not status.get('containerID'): raise ValueError('selected_container_not_running_or_unsupported')
-        return {'pod_uid':meta.get('uid'), 'container_id':status['containerID'], 'restart_count':status.get('restartCount'), 'previous_available':bool(status.get('lastState',{}).get('terminated'))}
+        return {'pod_uid':meta.get('uid'), 'container_id':status['containerID'], 'restart_count':status.get('restartCount'), 'previous_available':bool(status.get('lastState',{}).get('terminated',{}).get('containerID')), 'previous_container_id':status.get('lastState',{}).get('terminated',{}).get('containerID')}
     selected=identity()
     if p.get('action')=='probe':
         send({'kind':'capability','config_digest':digest, **selected, 'coverage':'Selected normal container only; pods/get and pods/log/get required; latest file or one previous instance; identity checks cannot eliminate API name-reuse race; dynamic credentials unsupported'})
     else:
         if not p.get('trusted'): raise ValueError('explicit_context_trust_required')
         if selected['pod_uid']!=p.get('pod_uid') or selected['container_id']!=p.get('container_id') or selected['restart_count']!=p.get('restart_count'): raise ValueError('pod_or_container_instance_changed_reinspect')
-        if p.get('previous') and not selected['previous_available']: raise ValueError('previous_instance_unavailable')
+        if p.get('previous') and (not selected['previous_available'] or selected['previous_container_id']!=p.get('previous_container_id')): raise ValueError('previous_instance_unavailable_or_changed')
         args=base+['logs',p['pod'],'--container='+p['container'],'--timestamps=true']
         if p.get('previous'): args+=['--previous=true','--tail=200']
         else: args+=['--follow=true']

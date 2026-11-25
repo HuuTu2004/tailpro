@@ -4,7 +4,7 @@
     "dev": "vite --host 127.0.0.1 --port 1420 --strictPort",
     "typecheck": "tsc --noEmit",
     "build": "npm run typecheck && vite build",
-    "contracts": "cargo run -p app-core --example export_contracts",
+    "contracts": "cargo run -p app-protocol --bin export-contracts",
     "tauri": "tauri"
   },
   "dependencies": { "@tauri-apps/api": "^2", "react": "^19", "react-dom": "^19" },

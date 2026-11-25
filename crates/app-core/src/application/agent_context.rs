@@ -282,7 +282,12 @@ impl AppHandle {
                     }
                     SourceSpec::File { path } => aliases.push(path.clone()),
                     SourceSpec::Journal { unit } => aliases.push(unit.clone()),
-                    SourceSpec::Kubernetes { namespace,pod,container,.. } => aliases.push(format!("{namespace}/{pod}/{container}")),
+                    SourceSpec::Kubernetes {
+                        namespace,
+                        pod,
+                        container,
+                        ..
+                    } => aliases.push(format!("{namespace}/{pod}/{container}")),
                 }
                 if let Some(m) = mappings.iter().find(|m| m.source == source.id) {
                     aliases.extend([m.service.clone(), m.project.clone()]);

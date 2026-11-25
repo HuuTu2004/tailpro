@@ -33,7 +33,7 @@ pub(super) async fn read(
     let mut tick = tokio::time::interval(Duration::from_millis(25));
     let mut line = Vec::new();
     let mut opened = false;
-    let mut parent: Option<(String,u64)> = None;
+    let mut parent: Option<(String, u64)> = None;
     let deadline = Instant::now() + Duration::from_secs(4);
     let result = async {
         loop {

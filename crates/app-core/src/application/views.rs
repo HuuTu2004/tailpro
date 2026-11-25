@@ -243,7 +243,13 @@ impl AppHandle {
                     environment: host.environment.clone(),
                     level: format!("{:?}", e.level),
                     message,
-                    time: bounded(e.event_time.as_deref().or(e.transport_time.as_deref()).unwrap_or(&e.observed_at_ms), 128),
+                    time: bounded(
+                        e.event_time
+                            .as_deref()
+                            .or(e.transport_time.as_deref())
+                            .unwrap_or(&e.observed_at_ms),
+                        128,
+                    ),
                     time_basis: if e.event_time.is_some() {
                         "event_time"
                     } else if e.transport_time.is_some() {
@@ -270,7 +276,10 @@ impl AppHandle {
             } else {
                 None
             };
+            let gap_sources:Vec<String>=snapshot.source_losses.keys().filter(|id|(request.sources.is_empty()||request.sources.contains(id))&&hosts.contains_key(id.as_str())).cloned().collect();
             Ok(ViewPage {
+                coverage:"Retained bytes only; upstream history/permissions can be unknown. Fragment matches require contiguous retained neighbors.".into(),
+                gap_sources,
                 schema_version: 1,
                 generation: request.generation,
                 revision: snapshot.fence.to_string(),
@@ -361,6 +370,20 @@ impl AppHandle {
                     }
                 }
             }
+            let mut retained_fragment_end=0_u64;
+            let mut fragment_contiguous=true;
+            let mut fragment_final=false;
+            if let Some(fragment)=event.fragment {
+                for (i,e) in snapshot.events()?.enumerate() {
+                    if i%128==0 {check(&cancel,deadline)?;}
+                    if e.source!=event.source||e.generation!=event.generation||e.stream!=event.stream {continue;}
+                    if let Some(part)=e.fragment.filter(|f|f.record==fragment.record) {
+                        fragment_contiguous&=part.start==retained_fragment_end;
+                        retained_fragment_end=part.end;fragment_final|=part.final_part;
+                        if group_parts.len()<200 {group_parts.push(e.id.clone());}else{group_parts_truncated=true;}
+                    }
+                }
+            }
             let mut detail = EventDetail {
                 schema_version: 1,
                 generation: request.generation,
@@ -368,7 +391,7 @@ impl AppHandle {
                 raw: request.include_raw.then(|| event.raw.to_string()),
                 raw_hex: request.include_raw.then(||event.raw.bytes().iter().chain(event.ending.bytes()).take(16*1024).map(|b|format!("{b:02x}")).collect()),
                 raw_bytes: (event.raw.bytes().len()+event.ending.bytes().len()).to_string(),
-                evidence_json: serde_json::json!({"parser":event.evidence,"event_time":event.event_time,"transport_time":event.transport_time,"observed_time_ms":event.observed_at_ms,"ending":event.ending,"fragment":event.fragment.map(|f|serde_json::json!({"record":f.record.to_string(),"start":f.start.to_string(),"end":f.end.to_string(),"final":f.final_part})),"coverage":"Retained parts only; neighbors can be evicted. Fragment bodies are withheld from external consumers."}).to_string(),
+                evidence_json: serde_json::json!({"parser":event.evidence,"event_time":event.event_time,"transport_time":event.transport_time,"observed_time_ms":event.observed_at_ms,"ending":event.ending,"fragment":event.fragment.map(|f|serde_json::json!({"record":f.record.to_string(),"start":f.start.to_string(),"end":f.end.to_string(),"final":f.final_part})),"retained_fragment_coverage":{"contiguous_from_head":fragment_contiguous,"final_retained":fragment_final,"end":retained_fragment_end.to_string()},"coverage":"Retained parts only; neighbors can be evicted. Fragment bodies are withheld from external consumers."}).to_string(),
                 quality: format!("{:?}", event.quality),
                 group_id: event.group_id.clone(),
                 group_parts,

@@ -2,7 +2,7 @@
 
 **Mỗi phase một file plan, các tính năng bên trong đánh số `1.1`, `1.2`, `2.1`…** Khi giao code, chọn đúng một mục để giữ scope; roadmap chỉ dùng quản lý thứ tự và gate.
 
-Năm phase ban đầu giữ nguyên phạm vi và gates. Phase6 bổ sung từ research ngày20/11/2026; **6.1 đã có schema/domain primitives và manual evidence ngày25/11/2026, các mục khác còn Planned**. Có thể bắt đầu từ prerequisite phase1–4 đã sẵn sàng, không bắt buộc chờ release phase5. Schema mới chưa được migrate vào ingestion runtime/wire.
+Năm phase ban đầu giữ nguyên phạm vi và gates. Phase6 bổ sung từ research ngày20/11/2026; **6.1–6.10 và6.12 đã có implementation/build/synthetic evidence ngày25/11/2026;6.11 Deferred, runtime gates vẫn Partial/Unrun**. Có thể bắt đầu từ prerequisite phase1–4 đã sẵn sàng, không bắt buộc chờ release phase5. Runtime đã migrate bytes/fragments/typed mapping; desktop/MCP có additive provenance/coverage fields và generated TS.
 
 | Phase | Plan | Phạm vi |
 | --- | --- | --- |
@@ -11,7 +11,7 @@ Năm phase ban đầu giữ nguyên phạm vi và gates. Phase6 bổ sung từ r
 | 3 | [AI-native, MCP và output an toàn](phase-03-ai-mcp-security.md) | 3.1–3.6: redaction, snapshot export, MCP/grants, read tools, observation cursor, Ollama/BYOK |
 | 4 | [Microservice và production debugging](phase-04-production-debugging.md) | 4.1–4.7: journal, error clusters, code hints, locate_service, trace/context, waterfall, topology |
 | 5 | [Tối ưu và phát hành Linux](phase-05-hardening-linux-release.md) | 5.1–5.5: packaging, performance, security/recovery, dùng thử, upgrade/rollout |
-| 6 — đề xuất | [Universal log ingestion](phase-06-universal-log-ingestion.md) | 6.1–6.12: raw fidelity, typed mapping, JSON/logfmt/header/multiline, rules, source continuity, diagnostics, measured optimization và Kubernetes gate riêng |
+| 6 — implemented / gates partial | [Universal log ingestion](phase-06-universal-log-ingestion.md) | 6.1–6.12: raw fidelity, typed mapping, JSON/logfmt/header/multiline, rules, source continuity, diagnostics, measured optimization và Kubernetes gate riêng |
 
 ## Cách thực thi
 
@@ -48,4 +48,4 @@ Chạm cap phải trả partial/incomplete/error/gap phù hợp; drop im lặng 
 
 ## Backlog sau 5 phase
 
-macOS/Windows/native Keychain, interactive encrypted-key UX, PM2 daemon/bus, Compose recreate tracking và OR/NOT/regex query còn ở backlog. Custom parse rules/multiline được lập plan ở6.6–6.7; indexes chỉ xem xét sau số đo6.10, disk durability là feasibility optional6.11, chưa phải implementation đã cam kết. PM2 file discovery đã thuộc1.7; thiếu Mac/signing không chặn Linux. Chọn scope cụ thể có hardware/budgets/estimate/rollback trước khi code.
+macOS/Windows/native Keychain, interactive encrypted-key UX, PM2 daemon/bus, Compose recreate tracking và OR/NOT/regex query còn ở backlog. Custom parse rules v1/six-family multiline có code và synthetic observations ở6.6–6.7; indexes chỉ xem xét sau số đo6.10, disk durability là feasibility optional6.11, chưa phải implementation đã cam kết. PM2 file discovery đã thuộc1.7; thiếu Mac/signing không chặn Linux. Chọn scope cụ thể có hardware/budgets/estimate/rollback trước khi code.

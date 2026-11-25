@@ -1,5 +1,5 @@
 pub(crate) mod parser;
-use crate::api::{Error, LogPreview, Preview, Result, ViewNotice};
+use crate::api::{Error, Result, ViewNotice};
 use log_core::{
     engine::{Ack, Engine, Snapshot},
     model::Event,
@@ -61,7 +61,14 @@ pub struct Ingest {
 impl Ingest {
     /// Fragment mode never interprets a suffix as a fresh structured record.
     pub fn raw(&self, bytes: Vec<u8>, stream: log_core::model::Stream, physical: u64) -> Event {
-        log_core::parse::raw(bytes, &self.source, self.generation, stream, physical, crate::application::now_ms())
+        log_core::parse::raw(
+            bytes,
+            &self.source,
+            self.generation,
+            stream,
+            physical,
+            crate::application::now_ms(),
+        )
     }
     pub async fn normalize(
         &self,
@@ -74,9 +81,9 @@ impl Ingest {
             return Err(Error::Limit("normalization frame"));
         }
         let observed = crate::application::now_ms();
-        let parser=self.parser.read().unwrap().clone();
+        let parser = self.parser.read().unwrap().clone();
         if bytes.len() < 4096 {
-            let mut event=log_core::parse::normalize_with(
+            let mut event = log_core::parse::normalize_with(
                 &bytes,
                 &self.source,
                 self.generation,
@@ -105,7 +112,15 @@ impl Ingest {
             if cancel.is_cancelled() {
                 return Err(Error::Cancelled);
             }
-            let mut event = log_core::parse::normalize_with(&bytes, &source, generation, stream, physical, observed, &parser.profile);
+            let mut event = log_core::parse::normalize_with(
+                &bytes,
+                &source,
+                generation,
+                stream,
+                physical,
+                observed,
+                &parser.profile,
+            );
             parser.apply(&mut event);
             if cancel.is_cancelled() {
                 return Err(Error::Cancelled);
@@ -364,53 +379,5 @@ impl EngineWorker {
             .try_send(Control::Notice(id, ack, tx))
             .map_err(|_| Error::Limit("engine control"))?;
         rx.await.map_err(|_| Error::Cancelled)?
-    }
-    pub async fn preview(&self) -> Result<Preview> {
-        let permit = self
-            .cpu
-            .clone()
-            .try_acquire_owned()
-            .map_err(|_| Error::Limit("CPU jobs"))?;
-        let (tx, rx) = oneshot::channel();
-        self.control
-            .try_send(Control::Snapshot(tx))
-            .map_err(|_| Error::Limit("engine control"))?;
-        let (snapshot, stats) = rx.await.map_err(|_| Error::Cancelled)??;
-        let cancel = self.cancel.clone();
-        tokio::task::spawn_blocking(move || {
-            let _permit = permit;
-            let deadline = Instant::now() + Duration::from_secs(2);
-            if cancel.is_cancelled() || Instant::now() > deadline {
-                return Err(Error::Cancelled);
-            }
-            let events = snapshot.recent(50)?;
-            let mut bytes = 0;
-            let events = events
-                .into_iter()
-                .filter_map(|e| {
-                    let message: String = e.message.chars().take(4096).collect();
-                    bytes += message.len() + 256;
-                    (bytes <= 512 * 1024).then(|| LogPreview {
-                        host: String::new(),
-                        environment: crate::api::Environment::Development,
-                        id: e.id.clone(),
-                        source: e.source.clone(),
-                        level: format!("{:?}", e.level),
-                        message,
-                        observed_at_ms: e.observed_at_ms.clone(),
-                        quality: format!("{:?}", e.quality),
-                    })
-                })
-                .collect();
-            Ok(Preview {
-                events,
-                complete: stats.live_rows <= 50,
-                retained_rows: stats.live_rows.to_string(),
-                resident_bytes: stats.resident_bytes.to_string(),
-                discarded: stats.counters.discarded.to_string(),
-            })
-        })
-        .await
-        .map_err(|_| Error::Cancelled)?
     }
 }

@@ -58,7 +58,10 @@ impl Checkpoints {
         if self.pending.len() >= 256 {
             return Err(Error::Limit("256 outstanding physical records"));
         }
-        self.next = self.next.checked_add(1).ok_or(Error::Limit("physical sequence overflow"))?;
+        self.next = self
+            .next
+            .checked_add(1)
+            .ok_or(Error::Limit("physical sequence overflow"))?;
         self.pending.insert(
             self.next,
             Pending {
@@ -103,7 +106,10 @@ impl Checkpoints {
             .get(&self.committed.saturating_add(1))
             .is_some_and(|p| p.committed)
         {
-            let p = self.pending.remove(&self.committed.saturating_add(1)).unwrap();
+            let p = self
+                .pending
+                .remove(&self.committed.saturating_add(1))
+                .unwrap();
             self.committed = p.end;
             if !matches!(p.position, Position::Marker) {
                 self.position = Some(p.position);

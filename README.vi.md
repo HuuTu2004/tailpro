@@ -21,9 +21,11 @@ npm run build
 cargo build -p tailpro-desktop --features custom-protocol --locked
 ```
 
+Giao diện gọi native Tauri IPC trực tiếp. Chạy `npm run tauri dev`; `npm run dev` riêng chỉ phục vụ frontend, không có backend giả hoặc dữ liệu demo.
+
 Ứng dụng chỉ dùng host key đã được tin cậy trong OpenSSH. Import alias không chạy `ssh -G` hay Match exec. Config dynamic cần consent riêng cho session; không có arbitrary command input. SSH agent/IdentityAgent hiện có được dùng trực tiếp, không tạo daemon key manager.
 
-Connect host → Discover trong scope đã chọn hoặc nhập absolute file path → Start. Discovery đọc metadata; config reading có checkbox/roots riêng. Pin chỉ lưu đường dẫn đã mở thành công và không tự stream. Production là nhãn do user gắn, không thay quyền truy cập. Live viewer đọc từng page ≤200 rows/512 KiB; cache tối đa 2000 rows. Ctrl+K mở palette, Ctrl+F focus query; Space ở bảng pause/resume, Enter mở Inspector, Escape đóng panel. Bảng log và Event details chung một khung: chọn dòng rồi bấm Details hoặc Enter để mở; kéo divider chỉnh độ rộng, dùng scrollbar ngang ở đáy bảng cho dòng dài.
+Connect host → mở cây HOSTS bên trái → thêm đường dẫn bằng + ở host → double-click log hoặc Enter để bắt đầu đọc và mở tab. × trên tab dừng reader; chuyển qua tab khác vẫn giữ reader đang chạy. Combine sources cho chọn các log đang mở để xem chung. Đóng hết tab thì viewer ngừng query và hiện hướng dẫn mở log. Discover sources vẫn là thao tác riêng để tìm metadata trong scope đã chọn; config reading có checkbox/roots riêng. File mới chỉ được pin sau khi mở thành công; thêm mục vào cây chưa cấp quyền đọc. Production là nhãn do user gắn, không thay quyền truy cập. Live viewer đọc từng page ≤200 rows/512 KiB; cache tối đa 2000 rows. Ctrl+K mở palette, Ctrl+F focus query; Space ở bảng pause/resume, Enter mở Inspector, Escape đóng panel. Bảng log và Event details chung một khung: chọn dòng rồi bấm Details hoặc Enter để mở; kéo divider chỉnh độ rộng, dùng scrollbar ngang ở đáy bảng cho dòng dài.
 
 Connections mở cửa sổ quản lý riêng. Thêm kết nối mở cửa sổ hệ điều hành riêng → nhập SSH alias/host → Test connection nếu cần → Save. Test dùng phiên tạm và không lưu; Save chỉ lưu profile, chưa kết nối hay Start log. Bấm Connect trên profile đã lưu để kết nối thật. Sources và công cụ điều tra ở màn hình log, còn nút bánh răng Settings mở cửa sổ cài đặt riêng.
 
@@ -35,12 +37,12 @@ Settings lưu cục bộ, versioned/atomic, tối đa 1 MiB. Log retention và c
 cargo fmt --all --check
 cargo check -p log-core --lib
 cargo check -p app-core --lib
-cargo clippy -p log-core -p app-core --lib --examples -- -D warnings
+cargo clippy -p log-core -p app-core --lib -- -D warnings
 npm run typecheck
 npm run build
 ```
 
-Theo quy định repo, không viết automated tests. Driver thủ công và kết quả thực ở [acceptance phase 1](docs/process/phase-01-acceptance.md) [acceptance phase 2](docs/process/phase-02-acceptance.md) và [acceptance phase 3](docs/process/phase-03-acceptance.md). Không dùng số đo local làm cam kết VPS/network hoặc compatibility Ubuntu 24.04.
+Theo quy định repo, không viết automated tests. Kết quả kiểm chứng lịch sử ở [acceptance phase 1](docs/process/phase-01-acceptance.md) [acceptance phase 2](docs/process/phase-02-acceptance.md) và [acceptance phase 3](docs/process/phase-03-acceptance.md). Không dùng số đo local làm cam kết VPS/network hoặc compatibility Ubuntu 24.04.
 
 ## Tài liệu
 

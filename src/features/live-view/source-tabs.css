@@ -1,0 +1,27 @@
+.source-tabs-bar { display:flex; align-items:stretch; gap:10px; min-width:0; border-bottom:1px solid var(--border); }
+.source-editor-tabs { display:flex; align-items:stretch; flex:1; min-width:0; overflow-x:auto; gap:3px; padding-bottom:1px; scrollbar-width:thin; }
+.source-editor-tab { display:flex; align-items:stretch; flex:0 0 auto; max-width:210px; border:1px solid #2e3845; border-bottom:2px solid transparent; border-radius:6px 6px 0 0; background:#151d27; }
+.source-editor-tab.active { border-bottom-color:var(--accent); background:#20332f; }
+.source-editor-tab>button[role=tab] { display:flex; flex-direction:column; align-items:flex-start; justify-content:center; min-width:75px; max-width:176px; min-height:43px; gap:3px; padding:6px 9px; border:0; border-radius:0; background:transparent; font-size:11px; text-align:left; }
+.source-editor-tab>button[role=tab]>span { max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.source-editor-tab>button[role=tab]>small { font-size:9px; color:#8fa6b8; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.source-editor-tab.active>button[role=tab]>span { color:var(--accent); }
+.source-editor-tab .source-tab-close { width:25px; flex-shrink:0; padding:0 4px; min-height:28px; align-self:center; background:transparent; border:0; color:#9aafbc; font-size:16px; }
+.source-editor-tab .source-tab-close:hover { color:#f3b9b9; background:#3b2b32; }
+.combined-log-tab { flex-shrink:0; background:#18252c; border:1px solid #334750; border-bottom:2px solid transparent; border-radius:6px 6px 0 0; font-size:11px; }
+.combined-log-tab.active { background:#20332f; color:var(--accent); border-bottom-color:var(--accent); }
+.combined-log-tab>span { font-size:10px; background:#293e43; border-radius:4px; padding:2px 5px; }
+.combine-open-logs { flex-shrink:0; align-self:center; min-height:31px; margin-bottom:5px; padding:6px 9px; background:transparent; font-size:11px; }
+.combine-open-logs.active { color:var(--accent); border-color:#497b68; }
+.source-tabs-empty { font-size:11px; color:#8fa4b5; padding:12px 5px; }
+.workspace-dialog.combine-log-dialog { width:460px; padding:20px; }
+.combine-log-dialog .dialog-heading h2 { font-size:17px; }
+.combine-log-dialog>p { font-size:12px; color:#a8bac9; }
+.combine-log-list { max-height:280px; overflow:auto; border-block:1px solid var(--border); }
+.combine-log-list>label { display:flex; gap:11px; align-items:center; margin:0; padding:12px 4px; cursor:pointer; }
+.combine-log-list>label+label { border-top:1px solid #25303b; }
+.combine-log-list strong { color:#d3e0eb; font-size:12px; font-weight:500; }
+.combine-log-list small { display:block; font-size:10px; margin-top:5px; color:#8fa4b5; overflow-wrap:anywhere; }
+.combine-log-actions { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:18px; }
+.combine-log-actions>span { font-size:11px; color:#a0b3c3; }
+@media(max-width:900px) { .source-tabs-bar { gap:6px; } .combine-open-logs { font-size:10px; padding:6px; } }

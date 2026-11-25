@@ -1,6 +1,6 @@
 # Ingestion schema v1 — contract mục 6.1
 
-Chốt ngày **25/11/2026, Asia/Bangkok**. Schema nội bộ version1 độc lập với desktop/MCP wire version2. Phạm vi6.1 là domain primitives và contract cho các bước tiếp theo; chưa migrate `Event`, readers hoặc output sang schema mới. Không gọi schema đã khai báo là runtime đã hỗ trợ format mới.
+Chốt ngày **25/11/2026, Asia/Bangkok**. Schema nội bộ version1 độc lập với desktop/MCP wire version2. Phần6.1 ghi contract/foundations tại thời điểm chốt. Migration6.2–6.8 hiện có trong runtime; xem mục8 và acceptance để phân biệt lịch sử6.1 với capability mới. Không gọi schema đã khai báo là runtime đã hỗ trợ format mới.
 
 Mã chuẩn: [`model/ingestion.rs`](../../crates/log-core/src/model/ingestion.rs). Admission outcome hiện hành dùng chung type này qua re-export `engine::Disposition`. [Plan](../plan/phase-06-universal-log-ingestion.md), [evidence](../process/phase-06-acceptance.md) và [contracts](contracts.md) ghi phạm vi triển khai.
 
@@ -118,3 +118,9 @@ Không thêm capability field vào desktop/MCP ở6.1. Publication vào SourceIn
 - Schema constants không thay `app_protocol::WIRE_VERSION=2`; chưa sửa wire DTO nên không regenerate TypeScript. Khi6.2/6.3 đưa schema vào runtime, update generated contracts nếu wire thực sự đổi; toàn bộ public integers lớn vẫn strings.
 - `OriginalPayload`, `UnixNanos`, `EventTimes` là foundations cho6.2/6.3; chưa có decoder, storage migration, new diagnostics endpoint hoặc telemetry export trong6.1.
 - Next scope đề xuất **6.2**: bounded original-byte/fragments, identity/range/ACK migration và fail-closed external projection. Chưa bật fragmented payload cho MCP/export trước khi boundary-redaction gate có evidence.
+
+## 8. Runtime migration6.2–6.8, cập nhật25/11/2026
+
+Các câu “runtime hiện tại/legacy/chưa migrate” ở mục1–7 là snapshot foundations6.1. Runtime mới dùng `RawPayload` với Vec original bytes và optional lossy display overlay; LF/CRLF/EOF/interrupted riêng, fragments có record/range/final lineage. File checkpoint có partial continuation; Docker/Kubernetes giữ complete parent boundary; Journal binary/repeated MESSAGE có bounded parts và entry ACK. Normalizer dùng deterministic declared paths, full JSON validation/logfmt grammar/header profiles; event/transport clocks tách riêng. Exact normalized ns trong evidence và sanitized JSON numbers là strings/arbitrary-precision literals, không JS Number/f64 round-trip.
+
+Inspector có original hex/delimiter/lineage, local search qua contiguous fragments, external projection mask fragmented/incomplete/lossy bodies trước predicates. Source counters tách admission/retention; legacy counters giữ tên cũ. Desktop/MCP schema2 có additive evidence/coverage/counter fields, TS regenerate từ Rust. [Config v1](parser-configuration.md) giới hạn rõ rule/profile được chấp nhận; không có arbitrary plugin/DST resolver/remote configuration loading. [Acceptance phase6](../process/phase-06-acceptance.md) có observations; runtime Gates A/B/C còn Partial/Unrun/Deferred.

@@ -1,3 +1,0 @@
-{"timestamp":"2026-11-20T07:00:00.000000001Z","level":"info","message":"synthetic request accepted","trace_id":"fixture-trace","order_id":"fixture-order","duration_ms":12}
-{"level":"error","message":"\u001b[31mSynthetic error\u001b[0m"}
-{"level":"warn","message":"literal <script> must remain text"}

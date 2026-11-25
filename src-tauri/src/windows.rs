@@ -1,14 +1,6 @@
 use app_core::application::AppHandle as CoreHandle;
 use tauri::Manager;
 
-fn preview_requested(window: &tauri::WebviewWindow) -> bool {
-    cfg!(debug_assertions)
-        && window.url().ok().is_some_and(|url| {
-            url.query_pairs()
-                .any(|(key, value)| key == "preview" && value == "1")
-        })
-}
-
 #[derive(Clone, Copy, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ManagerSection {
@@ -74,18 +66,9 @@ pub async fn open_workspace_manager(
             .set_focus()
             .map_err(|_| "Could not focus workspace management".into());
     }
-    let preview = preview_requested(&window);
-    let path = format!(
-        "index.html?manager={}{}",
-        section.name(),
-        if preview { "&preview=1" } else { "" }
-    );
+    let path = format!("index.html?manager={}", section.name());
     tauri::WebviewWindowBuilder::new(&app, section.label(), tauri::WebviewUrl::App(path.into()))
-        .title(if preview {
-            format!("{} · Demo", section.title())
-        } else {
-            section.title().into()
-        })
+        .title(section.title())
         .inner_size(760.0, 600.0)
         .min_inner_size(640.0, 520.0)
         .decorations(true)
@@ -148,21 +131,12 @@ pub async fn open_connection_editor(
             .set_focus()
             .map_err(|_| "Could not focus connection editor".into());
     }
-    let preview = preview_requested(&window);
     tauri::WebviewWindowBuilder::new(
         &app,
         "connection-editor",
-        tauri::WebviewUrl::App(if preview {
-            "index.html?manager=new-connection&preview=1".into()
-        } else {
-            "index.html?manager=new-connection".into()
-        }),
+        tauri::WebviewUrl::App("index.html?manager=new-connection".into()),
     )
-    .title(if preview {
-        "TailPro · New connection · Demo"
-    } else {
-        "TailPro · New connection"
-    })
+    .title("TailPro · New connection")
     .inner_size(600.0, 560.0)
     .min_inner_size(500.0, 480.0)
     .decorations(true)

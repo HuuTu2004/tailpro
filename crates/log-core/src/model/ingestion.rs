@@ -138,5 +138,10 @@ pub enum Disposition {
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, serde::Serialize)]
-#[serde(rename_all="snake_case")]
-pub enum EpochUnit { Seconds, Milliseconds, Microseconds, Nanoseconds }
+#[serde(rename_all = "snake_case")]
+pub enum EpochUnit {
+    Seconds,
+    Milliseconds,
+    Microseconds,
+    Nanoseconds,
+}

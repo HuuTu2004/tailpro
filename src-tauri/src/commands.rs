@@ -73,11 +73,6 @@ pub fn pin(app: State<'_, AppHandle>, host_id: String, path: String) -> Response
     wire(app.pin(&host_id, &path))
 }
 #[tauri::command]
-pub async fn preview(app: State<'_, AppHandle>) -> Response<Preview> {
-    wire(app.preview().await)
-}
-
-#[tauri::command]
 pub fn cancel_discovery(app: State<'_, AppHandle>, host_id: String) {
     app.cancel_discovery(&host_id);
 }
@@ -387,11 +382,39 @@ pub async fn save_host_profile(
 }
 
 #[tauri::command]
-pub async fn preview_parser(app:State<'_,AppHandle>,source:String,config:String,sample:String)->Response<String>{wire(app.preview_parser(&source,config,sample).await)}
+pub async fn preview_parser(
+    app: State<'_, AppHandle>,
+    source: String,
+    config: String,
+    sample: String,
+) -> Response<String> {
+    wire(app.preview_parser(&source, config, sample).await)
+}
 #[tauri::command]
-pub async fn apply_parser(app:State<'_,AppHandle>,source:String,config:String)->Response<String>{wire(app.apply_parser(&source,config).await)}
+pub async fn apply_parser(
+    app: State<'_, AppHandle>,
+    source: String,
+    config: String,
+) -> Response<String> {
+    wire(app.apply_parser(&source, config).await)
+}
 #[tauri::command]
-pub async fn ingestion_diagnostics(app:State<'_,AppHandle>)->Response<String>{wire(app.ingestion_diagnostics().await)}
+pub async fn ingestion_diagnostics(app: State<'_, AppHandle>) -> Response<String> {
+    wire(app.ingestion_diagnostics().await)
+}
 
 #[tauri::command]
-pub async fn inspect_kubernetes(app:State<'_,AppHandle>,host_id:String,kubeconfig:String,context:String,namespace:String,pod:String,container:String)->Response<KubernetesCapability>{wire(app.inspect_kubernetes(&host_id,kubeconfig,context,namespace,pod,container).await)}
+pub async fn inspect_kubernetes(
+    app: State<'_, AppHandle>,
+    host_id: String,
+    kubeconfig: String,
+    context: String,
+    namespace: String,
+    pod: String,
+    container: String,
+) -> Response<KubernetesCapability> {
+    wire(
+        app.inspect_kubernetes(&host_id, kubeconfig, context, namespace, pod, container)
+            .await,
+    )
+}

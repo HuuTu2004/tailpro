@@ -1,14 +1,7 @@
 import type { KubernetesCapability, ReadRequest, ReadResponse, ServiceMapping, TopologyRequest, TopologyGraph } from '../contracts/generated';
-import { invoke as invokeNative } from '@tauri-apps/api/core';
+import { invoke } from '@tauri-apps/api/core';
 import type { GrantInfo, Enrollment, Selection, ExportFormat, PreparedPreview, ExplainProvider, Explanation } from '../contracts/generated';
-import type { AppStatus, ConfigImport, DiscoveryRequest, DiscoveryResult, HostProfile, Preview, SourceSpec, ViewRequest, ViewPage, ViewNotice, DetailRequest, EventDetail, SavedView } from '../contracts/generated';
-export const isPreview = import.meta.env.DEV && new URLSearchParams(location.search).get('preview') === '1';
-function invoke<T>(command: string, args?: Record<string, unknown>): Promise<T> {
-  if (isPreview && !['open_workspace_manager', 'close_workspace_manager', 'open_connection_editor', 'close_connection_editor'].includes(command)) {
-    return import('./preview').then(preview => preview.previewInvoke(command, args) as Promise<T>);
-  }
-  return invokeNative<T>(command, args);
-}
+import type { AppStatus, ConfigImport, DiscoveryRequest, DiscoveryResult, HostProfile, SourceSpec, ViewRequest, ViewPage, ViewNotice, DetailRequest, EventDetail, SavedView } from '../contracts/generated';
 export const native = {
   inspectKubernetes: (hostId: string, kubeconfig: string, context: string, namespace: string, pod: string, container: string) => invoke<KubernetesCapability>('inspect_kubernetes', { hostId, kubeconfig, context, namespace, pod, container }),
   previewParser: (source: string, config: string, sample: string) => invoke<string>('preview_parser', { source, config, sample }),
@@ -61,5 +54,4 @@ export const native = {
   start: (hostId: string, spec: SourceSpec) => invoke<string>('start_source', { hostId, spec }),
   stop: (sourceId: string) => invoke<void>('stop_source', { sourceId }),
   pin: (hostId: string, path: string) => invoke<void>('pin', { hostId, path }),
-  preview: () => invoke<Preview>('preview'),
 };

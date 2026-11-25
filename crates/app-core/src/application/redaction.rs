@@ -184,8 +184,20 @@ pub fn sanitize(input: &str) -> Sanitized {
 }
 /// Predicates only see this event. Never scan the original event before projection.
 pub fn project(event: &Event) -> (Event, bool) {
-    let safe = if event.fragment.is_some() || event.quality.incomplete || event.quality.continuation || event.quality.lossy_utf8 { masked() } else { sanitize(&event.raw) };
-    let profile=log_core::parse::decode::ParseProfile {time_unit:event.evidence.epoch_unit,level_namespace:Some(event.evidence.severity_namespace),..Default::default()};
+    let safe = if event.fragment.is_some()
+        || event.quality.incomplete
+        || event.quality.continuation
+        || event.quality.lossy_utf8
+    {
+        masked()
+    } else {
+        sanitize(&event.raw)
+    };
+    let profile = log_core::parse::decode::ParseProfile {
+        time_unit: event.evidence.epoch_unit,
+        level_namespace: Some(event.evidence.severity_namespace),
+        ..Default::default()
+    };
     let mut projected = log_core::parse::normalize_with(
         safe.text.as_bytes(),
         &event.source,
@@ -195,18 +207,39 @@ pub fn project(event: &Event) -> (Event, bool) {
         event.observed_at_ms.parse().unwrap_or(0),
         &profile,
     );
-    projected.transport_time=event.transport_time.clone();
-    projected.quality.uncertain=event.quality.uncertain;
-    projected.quality.replay_suspected=event.quality.replay_suspected;
-    projected.quality.fragmented=event.quality.fragmented;
-    projected.quality.incomplete=event.quality.incomplete||safe.incomplete;
-    projected.quality.continuation=event.quality.continuation;
-    if event.stream == log_core::model::Stream::Journal {
-        if !safe.incomplete && projected.level == log_core::model::Level::Unknown && event.evidence.severity_namespace == log_core::model::ingestion::SeverityNamespace::Syslog {
-            projected.level = event.level;
-        }
-
+    // A rule capture is trusted configuration applied to raw content. Reuse its
+    // fields only when whole-record sanitization preserved every byte; otherwise
+    // re-extract solely from sanitized content so masked spans cannot leak.
+    if matches!(
+        event.evidence.decoder,
+        log_core::model::evidence::Decoder::Rule
+    ) && !safe.incomplete
+        && safe.text == *event.raw
+    {
+        projected.level = event.level;
+        projected.message = event.message.clone();
+        projected.event_time = event.event_time.clone();
+        projected.trace_id = event.trace_id.clone();
+        projected.order_id = event.order_id.clone();
+        projected.user_id = event.user_id.clone();
+        projected.duration_ms = event.duration_ms;
+        projected.evidence = event.evidence.clone();
     }
+    projected.transport_time = event.transport_time.clone();
+    projected.quality.uncertain = event.quality.uncertain;
+    projected.quality.replay_suspected = event.quality.replay_suspected;
+    projected.quality.fragmented = event.quality.fragmented;
+    projected.quality.incomplete = event.quality.incomplete || safe.incomplete;
+    projected.quality.continuation = event.quality.continuation;
+    if event.stream == log_core::model::Stream::Journal
+        && !safe.incomplete
+        && projected.level == log_core::model::Level::Unknown
+        && event.evidence.severity_namespace
+            == log_core::model::ingestion::SeverityNamespace::Syslog
+    {
+        projected.level = event.level;
+    }
+    projected.evidence.revision = event.evidence.revision;
     projected.sequence = event.sequence;
     projected.generation = event.generation.clone();
     projected.id = event.id.clone();

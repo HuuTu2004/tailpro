@@ -2,12 +2,15 @@ import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Connections } from '../features/connections/Connections';
 import { Sources } from '../features/sources/Sources';
+import { HostLogTree } from '../features/sources/HostLogTree';
+import { sourceKey, type LogSource } from '../features/sources/source-labels';
+import { SourceTabs } from '../features/live-view/SourceTabs';
 import { LiveView } from '../features/live-view/LiveView';
 import { Trace } from '../features/trace/Trace';
 import { Topology } from '../features/topology/Topology';
 import { Settings } from '../features/settings/Settings';
 import { CommandPalette } from '../shared/ui/CommandPalette';
-import { isPreview, native } from '../shared/client/native';
+import { native } from '../shared/client/native';
 import type { AppStatus } from '../shared/contracts/generated';
 import './styles.css';
 
@@ -51,29 +54,67 @@ function App() {
   const [selected, setSelected] = useState('');
   const [error, setError] = useState('');
   const [selectedSources, setSelectedSources] = useState<string[]>([]);
-  const [scopeHost, setScopeHost] = useState<string | null>(null);
-  const scopeRevision = useRef(0);
-  const hostSources = scopeHost ? status?.sources.filter(source => source.host_id === scopeHost).map(source => source.id) ?? [] : [];
-  const scope = scopeHost && hostSources.length ? hostSources : selectedSources;
-  function setScope(ids: string[]) { scopeRevision.current++; setScopeHost(null); setSelectedSources(ids); }
-  function selectHostLogs(hostId: string) {
-    const ids = status?.sources.filter(source => source.host_id === hostId).map(source => source.id) ?? [];
-    if (!ids.length) return;
-    scopeRevision.current++; setScopeHost(hostId); setSelectedSources(ids); setSelected(hostId);
+  const [combinedSources, setCombinedSources] = useState<string[]>([]);
+  const [opening, setOpening] = useState<Set<string>>(new Set());
+  const [closing, setClosing] = useState<Set<string>>(new Set());
+  const openingRef = useRef(new Set<string>());
+  const closingRef = useRef(new Set<string>());
+  const selectionRevision = useRef(0);
+  const statusRef = useRef<AppStatus | undefined>(undefined); statusRef.current = status;
+  const sources = status?.sources ?? [];
+  const selectedScope = selectedSources.filter(id => sources.some(source => source.id === id));
+  const scope = selectedScope.length ? selectedScope : sources[0] ? [sources[0].id] : [];
+  const sourcesKey = sources.map(source => source.id).join('|');
+  useEffect(() => {
+    setSelectedSources(previous => {
+      const remaining = previous.filter(id => sources.some(source => source.id === id));
+      if (remaining.length) return remaining.length === previous.length ? previous : remaining;
+      return sources[0] ? [sources[0].id] : [];
+    });
+    setCombinedSources(previous => {
+      const remaining = previous.filter(id => sources.some(source => source.id === id));
+      return remaining.length === previous.length ? previous : remaining;
+    });
+  }, [sourcesKey]);
+  function setScope(ids: string[]) {
+    selectionRevision.current++;
+    const readable = [...new Set(ids)].filter(id => statusRef.current?.sources.some(source => source.id === id));
+    setSelectedSources(readable);
+    if (readable.length > 1) setCombinedSources(readable);
+  }
+  function selectSourceTab(id: string) {
+    const source = statusRef.current?.sources.find(item => item.id === id);
+    if (!source) return;
+    setScope([id]); setSelected(source.host_id); setPage('workspace'); setTool(null);
   }
   function manageHostSources(hostId: string) {
     setSelected(hostId); setPage('workspace'); setTool('sources');
     setRequestedPath({ value: '', revision: Date.now(), hostId, mode: 'discover' });
   }
-  async function addLogPath(hostId: string, path: string, combine: boolean) {
-    const revision = scopeRevision.current;
-    const existing = status?.sources.find(source => source.host_id === hostId && source.spec.kind === 'file' && source.spec.path === path);
-    const id = existing?.id ?? await native.start(hostId, { kind: 'file', path });
-    await refreshStatus();
-    if (revision !== scopeRevision.current) return;
-    if (scopeHost === hostId) return;
-    const retainedSelection = scope.filter(sourceId => status?.sources.some(source => source.id === sourceId));
-    setScope(combine && retainedSelection.length ? [...new Set([...retainedSelection, id])] : [id]);
+  async function openTreeSource(entry: LogSource) {
+    const key = sourceKey(entry);
+    if (openingRef.current.has(key)) return;
+    const existing = statusRef.current?.sources.find(source => sourceKey({ hostId: source.host_id, spec: source.spec }) === key);
+    if (existing) { selectSourceTab(existing.id); return; }
+    const revision = ++selectionRevision.current;
+    openingRef.current.add(key); setOpening(new Set(openingRef.current)); setError('');
+    try {
+      const id = await native.start(entry.hostId, entry.spec);
+      await refreshStatus();
+      if (alive.current && revision === selectionRevision.current) selectSourceTab(id);
+    } catch (reason) { if (alive.current) setError(String(reason)); }
+    finally { openingRef.current.delete(key); if (alive.current) setOpening(new Set(openingRef.current)); }
+  }
+  async function closeLog(id: string) {
+    if (closingRef.current.has(id)) return;
+    selectionRevision.current++; closingRef.current.add(id); setClosing(new Set(closingRef.current)); setError('');
+    try {
+      await native.stop(id);
+      if (!alive.current) return;
+      setStatus(previous => previous ? { ...previous, sources: previous.sources.filter(source => source.id !== id) } : previous);
+      await refreshStatus();
+    } catch (reason) { if (alive.current) setError(String(reason)); }
+    finally { closingRef.current.delete(id); if (alive.current) setClosing(new Set(closingRef.current)); }
   }
   const [palette, setPalette] = useState(false);
   const [requestedPath, setRequestedPath] = useState<{ value: string; revision: number; hostId: string; mode?: 'file' | 'discover' }>();
@@ -88,8 +129,9 @@ function App() {
     const generation = ++statusGeneration.current;
     const next = await native.status();
     if (!alive.current || generation !== statusGeneration.current) return;
-    setStatus(next);
+    statusRef.current = next; setStatus(next);
     setSelected(current => next.connections.some(connection => connection.host.id === current) ? current : next.connections[0]?.host.id ?? '');
+    return next;
   }
 
   useEffect(() => {
@@ -124,7 +166,7 @@ function App() {
 
   async function run(action: () => Promise<unknown>) {
     setError('');
-    try { await action(); await refreshStatus(); }
+    try { const result = await action(); const next = await refreshStatus(); if (typeof result === 'string' && next?.sources.some(source => source.id === result)) selectSourceTab(result); }
     catch (reason) { if (alive.current) setError(String(reason)); }
   }
   function changePage(next: Page) {
@@ -147,9 +189,9 @@ function App() {
   const currentTool = tools.find(item => item.id === tool);
   const connections = status?.connections ?? [];
 
-  if (connectionEditor) return <div className="connection-editor-shell">{isPreview && <span className="preview-editor-label">DEMO</span>}<Connections standaloneEditor connections={connections} selected={selected} select={setSelected} run={run}/></div>;
+  if (connectionEditor) return <div className="connection-editor-shell"><Connections standaloneEditor connections={connections} selected={selected} select={setSelected} run={run}/></div>;
 
-  return <div className={'app-shell' + (managementWindow ? ' management-shell' : '')}>
+  return <div className={'app-shell' + (managementWindow ? ' management-shell' : ' log-tree-shell')}>
     {!managementWindow && <aside className="app-sidebar">
       <button className="brand" onClick={() => { if (managementWindow) setPage('connections'); else viewport.current?.focus(); }} aria-label="TailPro workspace"><span className="brand-symbol"><Icon name="workspace"/></span><span>TailPro</span></button>
       <nav className="workspace-tabs" role={managementWindow ? 'tablist' : undefined} aria-label="Workspace management" aria-orientation={managementWindow ? 'vertical' : undefined} onKeyDown={event => {
@@ -159,14 +201,11 @@ function App() {
         const next = event.key === 'Home' ? 0 : event.key === 'End' ? pages.length - 1 : (index + (event.key === 'ArrowRight' || event.key === 'ArrowDown' ? 1 : -1) + pages.length) % pages.length;
         changePage(pages[next].id); document.getElementById('tab-' + pages[next].id)?.focus();
       }}>{navigationPages.map(item => <button key={item.id} id={'tab-' + item.id} role={managementWindow ? 'tab' : undefined} className={page === item.id ? 'is-selected' : ''} aria-haspopup={managementWindow ? undefined : 'dialog'} aria-label={item.label} title={item.label} tabIndex={!managementWindow || page === item.id ? 0 : -1} aria-selected={managementWindow ? page === item.id : undefined} aria-controls={managementWindow ? 'page-' + item.id : undefined} onClick={() => changePage(item.id)}><Icon name={item.id}/><span>{item.label}</span>{item.id === 'workspace' && <span className="sidebar-count">{status?.sources.length ?? 0}</span>}</button>)}</nav>
-      <div className="sidebar-hosts"><div className="sidebar-section-heading"><span className="navigation-caption">HOSTS</span><button className="sidebar-add" aria-label="Manage connections" title="Manage connections" onClick={() => changePage('connections')}>+</button></div>
-        <div className="sidebar-host-list">{connections.map(connection => <button key={connection.host.id} className={'sidebar-host' + (selected === connection.host.id ? ' selected' : '')} aria-pressed={selected === connection.host.id} title={connection.host.target + ' · ' + connection.host.environment + ' · ' + connection.state.replaceAll('_', ' ')} onClick={() => setSelected(connection.host.id)}><span className={'dot ' + connection.state}/><span>{connection.host.target}</span>{connection.host.environment === 'production' && <small>PROD</small>}</button>)}
-        {!connections.length && <p className="sidebar-empty">Your hosts will appear here.</p>}</div>
-      </div>
+      <HostLogTree connections={connections} sources={sources} selectedHost={selected} scope={scope} opening={opening} selectHost={setSelected} open={openTreeSource} discover={manageHostSources} manageConnections={() => changePage('connections')}/>
       <div className="sidebar-session"><span className="local-session-mark"><Icon name="connections"/></span><div><strong>SSH sessions</strong><span>Read-only over SSH</span></div><span className="dot connected"/></div>
     </aside>}
     <header className="app-header">
-      <div className="page-title"><h1>{page === 'workspace' ? 'Logs' : page === 'connections' ? 'Connections' : 'Settings'}</h1>{isPreview && <span className="preview-badge" title="Sample data · no real SSH connections">DEMO</span>}</div>
+      <div className="page-title"><h1>{page === 'workspace' ? 'Logs' : page === 'connections' ? 'Connections' : 'Settings'}</h1></div>
       <div className="app-header-actions">
         {!managementWindow && page === 'workspace' && <div className="workspace-tool-buttons"><button className={tool === 'sources' ? 'active' : ''} aria-expanded={tool === 'sources'} aria-controls="workspace-tool-panel" onClick={event => toggleTool('sources', event.currentTarget)}><Icon name="sources"/>Sources<span className="tool-count">{status?.sources.length ?? 0}</span></button>
         <details className="investigate-menu"><summary><Icon name="trace"/>Investigate<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" aria-hidden="true"><path d="m3 4.5 3 3 3-3"/></svg></summary><div className="investigate-options">{tools.filter(item => item.id !== 'sources').map(item => <button key={item.id} onClick={event => { const menu = event.currentTarget.closest('details'); const opener = menu?.querySelector('summary'); menu?.removeAttribute('open'); toggleTool(item.id, opener ?? event.currentTarget); }}><Icon name={item.id}/><span><strong>{item.label}</strong><small>{item.description}</small></span></button>)}</div></details></div>}
@@ -178,7 +217,7 @@ function App() {
     <main className="app-main">
       {!managementWindow && <section className="workspace-page" id="page-workspace" role="region" aria-label="Live logs" hidden={page !== 'workspace' || managementWindow}>
         <div className={'workspace-body' + (tool ? ' has-tool' : '')}>
-          <div className="log-workspace">{!managementWindow && <LiveView onGetStarted={() => connections.length ? toggleTool('sources') : changePage('connections')} status={status} scope={scope} setScope={setScope} scopeHost={scopeHost} selectHostLogs={selectHostLogs} addLogPath={addLogPath} manageSources={manageHostSources} queryInput={queryInput} viewport={viewport} active={page === 'workspace'} inspectorVisible={!tool} onInspect={() => setTool(null)}/>}</div>
+          <div className="log-workspace">{!managementWindow && <LiveView onGetStarted={() => connections.length ? toggleTool('sources') : changePage('connections')} status={status} scope={scope} reading={scope.length > 0} sourceTabs={<SourceTabs status={status} scope={scope} combined={combinedSources} closing={closing} select={selectSourceTab} close={closeLog} combine={ids => { setScope(ids); setTool(null); }}/>} queryInput={queryInput} viewport={viewport} active={page === 'workspace'} inspectorVisible={!tool} onInspect={() => setTool(null)}/>}</div>
           {page === 'workspace' && currentTool && <aside className="workspace-tool-panel" id="workspace-tool-panel" ref={panel} tabIndex={-1} aria-label={currentTool.label} onKeyDown={event => { if (event.key === 'Escape' && !event.defaultPrevented && !document.querySelector('dialog[open]')) { event.stopPropagation(); closeTool(); } }}>
             <div className="tool-panel-header"><div><Icon name={currentTool.id}/><strong>{currentTool.label}</strong></div><button className="icon-button" onClick={closeTool} title="Close tool · Escape" aria-label={'Close ' + currentTool.label}><Icon name="close"/></button></div>
             <div className="tool-panel-content">
@@ -192,7 +231,7 @@ function App() {
       {managementWindow && page === 'connections' && <section className="standalone-page" id="page-connections" role="tabpanel" aria-labelledby="tab-connections"><Connections connections={connections} selected={selected} select={setSelected} run={run}/></section>}
       {managementWindow && page === 'settings' && <section className="standalone-page" id="page-settings" role="tabpanel" aria-labelledby="tab-settings"><Settings status={status}/></section>}
     </main>
-    {palette && <CommandPalette status={status} hostId={selected} selectHost={setSelected} selectSource={id => { setScope([id]); setPage('workspace'); setTool(null); }} choosePath={choosePath} close={() => setPalette(false)} run={run}/>}
+    {palette && <CommandPalette status={status} hostId={selected} selectHost={setSelected} selectSource={selectSourceTab} choosePath={choosePath} close={() => setPalette(false)} run={run}/>}
     <footer className="app-footer"><span><span className="dot connected"/>Local-first<span className="footer-divider">·</span>No remote agent installed</span><span>{connections.length} host{connections.length === 1 ? '' : 's'} · {status?.sources.length ?? 0} sources</span></footer>
   </div>;
 }

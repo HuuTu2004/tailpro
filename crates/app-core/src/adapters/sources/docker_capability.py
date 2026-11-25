@@ -14,7 +14,7 @@ try:
             if key.data=='out': data.extend(block)
     if child.wait(timeout=.3)!=0: raise ValueError()
     item=json.loads(data)[0]
-    if item.get('Id')!=p['id']: raise ValueError()
+    if not item.get('Id','').startswith(p['id']): raise ValueError()
     driver=item.get('HostConfig',{}).get('LogConfig',{}).get('Type','')
     print(json.dumps({'kind':'capability','driver':driver if driver in ('json-file','local','none','journald') else 'other_or_unknown','tty':bool(item.get('Config',{}).get('Tty')), 'readable':driver!='none', 'coverage':'driver cache/history unknown; timestamp overlap replay, no durable offset'}))
 except (ValueError,KeyError,IndexError,OSError,subprocess.SubprocessError):

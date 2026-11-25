@@ -1,5 +1,7 @@
 # Phase 4 — Implementation và local observations
 
+> Historical validation record. Synthetic examples, fixtures, raw observation artifacts and the `manual-fixtures` feature were removed during source cleanup on 25/11/2026. Commands mentioning them describe past runs and are no longer current setup instructions. Use `npm run contracts` for TypeScript generation and the desktop runtime for real sources.
+
 Ngày 20/11/2026, Asia/Bangkok. Scope user giao toàn file: 4.1–4.7. **Gate PARTIAL**, chưa production/release certification; các runtime gates Phase 1–3 vẫn giữ nguyên. Không viết automated tests hoặc test framework. Driver dưới đây chỉ in observations từ dữ liệu synthetic để operator kiểm tra.
 
 ## Code và semantics

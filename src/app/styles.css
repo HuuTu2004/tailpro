@@ -46,7 +46,6 @@ small { font-size: 11px; color: #a1b2c1; }
 .workspace-tabs > button.is-selected { background: #22322e; color: #a4e7cf; border-color: #2d443b; }
 .management-shell .sidebar-hosts { display: none; }
 .management-shell .page-title > span { display: none; }
-.management-shell .page-title > .preview-badge { display: inline-flex; }
 .management-shell .app-header { grid-column: 2; }
 .app-shell.management-shell { grid-template-columns: minmax(0,1fr); grid-template-rows: 56px minmax(0,1fr) 26px; min-height: 480px; }
 .management-shell .app-sidebar { display: none; }
@@ -91,8 +90,6 @@ small { font-size: 11px; color: #a1b2c1; }
 .page-title { display: flex; align-items: center; gap: 16px; min-width: 0; }
 .page-title h1 { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -.5px; white-space: nowrap; }
 .page-title > span { font-size: 12px; color: #989faf; }
-.page-title > .preview-badge, .preview-editor-label { display: inline-flex; font-size: 10px; color: #f2c78d; background: #302619; border: 1px solid #665033; border-radius: 4px; padding: 3px 7px; letter-spacing: .7px; }
-.preview-editor-label { position: fixed; top: 8px; right: 18px; z-index: 10; }
 .app-header-actions { display: flex; align-items: center; gap: 14px; }
 .workspace-tool-buttons { display: flex; gap: 8px; }
 .workspace-tool-buttons > button, .investigate-menu > summary { background: #181c24; border: 1px solid #333a48; color: #cad0dc; font-size: 12px; min-height: 34px; padding: 7px 11px; border-radius: 7px; }

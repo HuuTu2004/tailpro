@@ -9,27 +9,37 @@ pub struct RawPayload {
 }
 impl RawPayload {
     pub fn new(bytes: Vec<u8>) -> Self {
-        let display = std::str::from_utf8(&bytes).err().map(|_| String::from_utf8_lossy(&bytes).into_owned());
+        let display = std::str::from_utf8(&bytes)
+            .err()
+            .map(|_| String::from_utf8_lossy(&bytes).into_owned());
         Self { bytes, display }
     }
-    pub fn bytes(&self) -> &[u8] { &self.bytes }
+    pub fn bytes(&self) -> &[u8] {
+        &self.bytes
+    }
     pub fn charged_bytes(&self) -> usize {
         self.bytes.capacity() + self.display.as_ref().map_or(0, String::capacity)
     }
     pub fn append(&mut self, other: &Self, separator: &[u8]) {
         self.bytes.extend_from_slice(separator);
         self.bytes.extend_from_slice(other.bytes());
-        self.display = std::str::from_utf8(&self.bytes).err().map(|_| String::from_utf8_lossy(&self.bytes).into_owned());
+        self.display = std::str::from_utf8(&self.bytes)
+            .err()
+            .map(|_| String::from_utf8_lossy(&self.bytes).into_owned());
     }
 }
 impl Deref for RawPayload {
     type Target = str;
     fn deref(&self) -> &str {
-        self.display.as_deref().unwrap_or_else(|| std::str::from_utf8(&self.bytes).expect("validated payload"))
+        self.display
+            .as_deref()
+            .unwrap_or_else(|| std::str::from_utf8(&self.bytes).expect("validated payload"))
     }
 }
 impl Serialize for RawPayload {
-    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> { s.serialize_str(self) }
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_str(self)
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
@@ -46,7 +56,11 @@ pub enum RecordEnding {
 }
 impl RecordEnding {
     pub fn bytes(self) -> &'static [u8] {
-        match self { Self::Lf => b"\n", Self::CrLf => b"\r\n", _ => b"" }
+        match self {
+            Self::Lf => b"\n",
+            Self::CrLf => b"\r\n",
+            _ => b"",
+        }
     }
 }
 

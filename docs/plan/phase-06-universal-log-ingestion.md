@@ -1,10 +1,10 @@
 # Phase 6 — Universal log ingestion, continuity và tối ưu có số đo
 
-**Trạng thái: 6.1 đã chốt schema và có checked domain primitives; 6.2–6.12 chưa triển khai.** Lập ngày20/11/2026, cập nhật25/11/2026, Asia/Bangkok. [Schema v1](../system-design/ingestion-schema.md) và [acceptance6.1](../process/phase-06-acceptance.md) phân biệt foundations với runtime legacy. Số thứ tự6 không bắt buộc chờ phát hành phase5 mới bắt đầu; không thay các runtime gates chưa đạt của phase1–4.
+**Trạng thái: đã triển khai core 6.2–6.8, hardening/source simulation 6.9, baseline và tối ưu có số đo 6.10, scoped Kubernetes 6.12; 6.11 Deferred theo decision RAM mode. Build/manual evidence xem acceptance; Gate A/B/C chưa được chứng nhận runtime đầy đủ.** Lập ngày20/11/2026, cập nhật25/11/2026, Asia/Bangkok. [Schema v1](../system-design/ingestion-schema.md) và [acceptance6.1](../process/phase-06-acceptance.md) phân biệt foundations với runtime legacy. Số thứ tự6 không bắt buộc chờ phát hành phase5 mới bắt đầu; không thay các runtime gates chưa đạt của phase1–4.
 
 **Kết quả cần đạt:** Một pipeline dùng chung đọc được log của Go/Rust/Node/Java/Python/PHP, Redis/Kafka/Nginx qua các nguồn được hỗ trợ; thêm format bằng cấu hình nhỏ; luôn giữ bằng chứng về nội dung, cách suy luận và khoảng thiếu. Tối ưu tổng chi phí đọc → parse → giữ → query → UI/MCP trên cùng workload.
 
-**Cơ sở:** [Research nguồn chính thức](../system-design/universal-log-ingestion-research.md), [architecture](../system-design/architecture.md), [contracts](../system-design/contracts.md), [current status](../process/current-status.md). Schema6.1 đã được chốt; các hành vi6.2–6.12 dưới đây còn là **thiết kế đề xuất** cho implementation tiếp theo.
+**Cơ sở:** [Research nguồn chính thức](../system-design/universal-log-ingestion-research.md), [architecture](../system-design/architecture.md), [contracts](../system-design/contracts.md), [current status](../process/current-status.md). Schema6.1 đã được chốt. Thiết kế bên dưới là mục tiêu; [acceptance](../process/phase-06-acceptance.md) và [parser config v1](../system-design/parser-configuration.md) ghi chính xác phần đã triển khai, phần mô phỏng và capability còn Unsupported.
 
 ## 1. Quyết định kiến trúc
 
@@ -33,7 +33,7 @@ flowchart LR
 
 ## 2. Khoảng thiếu đã xác nhận trong repo
 
-Đây là nhận xét từ code workspace, không phải runtime certification. Các file đang có thay đổi của công việc khác được giữ nguyên trong đợt lập plan.
+Bảng này là snapshot baseline trước implementation6.2–6.12, không phải mô tả code hiện tại hoặc runtime certification; trạng thái sau implementation xem acceptance. Các file đang có thay đổi của công việc khác được giữ nguyên trong đợt lập plan.
 
 | Vùng | Đã có | Thiếu cần xử lý | Mục |
 | --- | --- | --- | --- |
@@ -284,7 +284,7 @@ Tối ưu search không được dùng raw-secret prefilter để thay predicate
 
 ## 9. Các mục triển khai và dependency
 
-Chỉ code mục được chọn. **6.1: contract chốt / primitives build và manual observed**; các mục còn lại **Planned**. Không tạo automated tests/framework; dùng acceptance thủ công, examples/profiling, scoped build/lint/typecheck theo AGENTS.md. Contract accepted không đồng nghĩa runtime parser đã migrate.
+Scope lần này theo yêu cầu user là **toàn bộ phase**, với log/CLI mô phỏng được user chấp thuận. **6.1** giữ foundations; **6.2–6.8** có code/build/manual observations, **6.9/6.12** có helper/source simulation, **6.10** có baseline và measured changes; **6.11 Deferred**. Các runtime gates không được tự chuyển thành Accepted. Không tạo automated tests/framework; dùng acceptance thủ công trên runtime, profiling và scoped build/lint/typecheck theo AGENTS.md. Contract accepted không đồng nghĩa runtime parser đã migrate.
 
 | ID | Ưu tiên / dependency | Đầu ra và code sở hữu | Gate hoàn thành |
 | --- | --- | --- | --- |
@@ -338,7 +338,7 @@ Giả thuyết tối ưu chỉ được nhận khi output/coverage/gaps không x
 
 Workflow cho từng item: **Planned → Implementing → Build checked → Manual observed → Runtime accepted**. `Blocked` phải ghi prerequisite/evidence cụ thể; `Partial` giữ danh sách case chưa chạy. Không đổi trạng thái vì có file code hoặc benchmark đẹp.
 
-Theo dõi từng6.x tại [current status](../process/current-status.md) và [acceptance phase6](../process/phase-06-acceptance.md). Đã ghi evidence foundations6.1 ngày25/11/2026; các gate chưa chạy giữ Planned/Unrun. Mỗi observation ghi:
+Theo dõi từng6.x tại [current status](../process/current-status.md) và [acceptance phase6](../process/phase-06-acceptance.md). Đã ghi evidence foundations6.1 và core/application/source simulations ngày25/11/2026; gate trên daemon/cluster/native sustained thật giữ Unrun/Partial. Mỗi observation ghi:
 
 ```text
 item_id / evidence_id / date_timezone / git_revision + dirty_state
@@ -356,4 +356,4 @@ raw_reconstruction_or_disposition / known_limits / next_action
 
 Rollback theo source: tắt rule/profile mới hoặc dùng raw-only; engine/decoder revisions phải nhất quán, flush generation khi đổi. Raw-only vẫn tôn trọng admission/retention/policy và báo structured fields unavailable; không che lỗi transport.
 
-**Bước code đề xuất tiếp theo: 6.2.** Schema6.1 đã chốt ranh giới raw/time/ACK; bước6.2 migrate raw/fragments và giữ redaction/checkpoint contract trước khi mở rộng decoder.
+**Bước tiếp theo:** đóng runtime gates trên daemon/cluster/target thật khi có môi trường; hoàn thiện sustained/native E2E/RSS và broader adversarial matrix. Custom rule v1 chỉ hỗ trợ schema đã ghi; không claim support mọi format, durable storage, zero-drop end-to-end hoặc exactly-once.

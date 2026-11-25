@@ -79,6 +79,8 @@ npm run build
 cargo build -p tailpro-desktop --features custom-protocol --locked
 ```
 
+The UI uses native Tauri IPC. Start it with `npm run tauri dev`; `npm run dev` alone serves frontend assets and does not supply a backend or sample data.
+
 This produces a development binary, not a packaged release. The Rust core libraries can be built without a WebView; see [CONTRIBUTING.md](CONTRIBUTING.md) for scoped checks.
 
 ## Your data and your tools

@@ -63,7 +63,10 @@ pub(crate) async fn run(mut reader: Reader) {
             result,
             Err(Error::NeedsAction(_)) | Err(Error::Invalid(_)) | Err(Error::Limit(_))
         ) {
-            let detail=match &result {Err(Error::NeedsAction(reason))=>reason.clone(), _=>"Source protocol/capability or budget failure; continuity unknown".into()};
+            let detail = match &result {
+                Err(Error::NeedsAction(reason)) => reason.clone(),
+                _ => "Source protocol/capability or budget failure; continuity unknown".into(),
+            };
             reader.state("needs_action", Some(detail));
             return;
         }
@@ -110,10 +113,15 @@ impl Reader {
         for event in events {
             // Docker has no mid-record cursor. Its one pending parent fences
             // later stream ACKs until the full record has terminal dispositions.
-            let hold = !event.checkpoint_complete || (matches!(self.spec, SourceSpec::Docker { .. } | SourceSpec::Kubernetes {..})
-                && event.fragment.is_some_and(|f| !f.final_part));
+            let hold = !event.checkpoint_complete
+                || (matches!(
+                    self.spec,
+                    SourceSpec::Docker { .. } | SourceSpec::Kubernetes { .. }
+                ) && event.fragment.is_some_and(|f| !f.final_part));
             let ack = self.ingest.append(event).await?;
-            if !hold { checkpoint.ack(ack.generation, &ack.physical); }
+            if !hold {
+                checkpoint.ack(ack.generation, &ack.physical);
+            }
         }
         Ok(())
     }
@@ -156,10 +164,32 @@ impl Decode {
     }
 }
 async fn docker(reader: &Reader, session: &Session, id: &str, cp: &mut Checkpoints) -> Result<()> {
-    let capability=super::inspect(session,RemoteOperation::DockerCapability(serde_json::json!({"id":id})),&reader.cancel).await?;
-    if capability["kind"]!="capability" {return Err(Error::NeedsAction("Docker inspect unavailable/denied; check Docker CLI and permissions".into()));}
-    if capability["readable"]==false {return Err(Error::NeedsAction("Unsupported Docker logging driver: none".into()));}
-    reader.marker(if capability["tty"]==true {"Docker TTY merges streams; history/cache coverage unknown"}else{"Docker stdout/stderr selected; driver cache/history coverage unknown"},cp).await?;
+    let capability = super::inspect(
+        session,
+        RemoteOperation::DockerCapability(serde_json::json!({"id":id})),
+        &reader.cancel,
+    )
+    .await?;
+    if capability["kind"] != "capability" {
+        return Err(Error::NeedsAction(
+            "Docker inspect unavailable/denied; check Docker CLI and permissions".into(),
+        ));
+    }
+    if capability["readable"] == false {
+        return Err(Error::NeedsAction(
+            "Unsupported Docker logging driver: none".into(),
+        ));
+    }
+    reader
+        .marker(
+            if capability["tty"] == true {
+                "Docker TTY merges streams; history/cache coverage unknown"
+            } else {
+                "Docker stdout/stderr selected; driver cache/history coverage unknown"
+            },
+            cp,
+        )
+        .await?;
     let since = match &cp.position {
         Some(Position::Docker(t)) => Some(conservative_since(t)?),
         _ => None,
@@ -204,8 +234,12 @@ async fn docker(reader: &Reader, session: &Session, id: &str, cp: &mut Checkpoin
         Ok(())
     }.await;
     // Retain the observed suffix, but never advance Docker's complete-record cursor.
-    if let Some(frame)=a.framer.interrupt() { let _=docker_frame(reader,&mut a,frame,cp).await; }
-    if let Some(frame)=b.framer.interrupt() { let _=docker_frame(reader,&mut b,frame,cp).await; }
+    if let Some(frame) = a.framer.interrupt() {
+        let _ = docker_frame(reader, &mut a, frame, cp).await;
+    }
+    if let Some(frame) = b.framer.interrupt() {
+        let _ = docker_frame(reader, &mut b, frame, cp).await;
+    }
     reader.admit(a.assembler.flush(Instant::now()), cp).await?;
     reader.admit(b.assembler.flush(Instant::now()), cp).await?;
     let exited = channel.child.try_wait()?;
@@ -227,49 +261,96 @@ async fn docker_chunk(
 ) -> Result<()> {
     for chunk in bytes.chunks(512) {
         let mut frames = Vec::new();
-        decoder.framer.push(chunk, |f| frames.push(f)).map_err(|e| Error::NeedsAction(e.into()))?;
-        for frame in frames { docker_frame(reader,decoder,frame,cp).await?; }
+        decoder
+            .framer
+            .push(chunk, |f| frames.push(f))
+            .map_err(|e| Error::NeedsAction(e.into()))?;
+        for frame in frames {
+            docker_frame(reader, decoder, frame, cp).await?;
+        }
     }
     Ok(())
 }
-async fn docker_frame(reader:&Reader, decoder:&mut Decode, frame:Frame, cp:&mut Checkpoints)->Result<()> {
-            let continuation = frame.fragment.is_some_and(|f| f.start > 0);
-            let (timestamp, physical, payload) = if continuation {
-                let (timestamp, physical, _) = decoder.docker_partial.as_ref().ok_or_else(|| Error::Invalid("orphan Docker fragment".into()))?;
-                (timestamp.clone(), *physical, frame.bytes.as_slice())
-            } else {
-                let split = frame.bytes.iter().position(|b| *b == b' ').ok_or_else(|| Error::NeedsAction("Docker timestamps unavailable".into()))?;
-                let timestamp = std::str::from_utf8(&frame.bytes[..split]).map_err(|_| Error::Invalid("Docker timestamp".into()))?;
-                if timestamp.len() > 40 || time::OffsetDateTime::parse(timestamp, &time::format_description::well_known::Rfc3339).is_err() {
-                    return Err(Error::NeedsAction("Docker permission/runtime error or invalid timestamp".into()));
-                }
-                if !matches!(reader.spec,SourceSpec::Kubernetes{..}) {reader.state("streaming", Some("Docker driver/cache/history coverage unknown; timestamp replay only".into()));}
-                if cp.pending_len() >= 192 { reader.admit(decoder.assembler.flush(Instant::now()), cp).await?; }
-                let physical = cp.allocate(Position::Docker(timestamp.into()))?;
-                if frame.fragment.is_some() { decoder.docker_partial = Some((timestamp.into(), physical, (split + 1) as u64)); }
-                (timestamp.to_owned(), physical, &frame.bytes[split + 1..])
-            };
-            let mut event = if frame.fragment.is_some() || frame.ending == RecordEnding::Interrupted {
-                reader.ingest.raw(payload.to_vec(), decoder.stream, physical)
-            } else {
-                reader.ingest.normalize(payload.to_vec(), decoder.stream, physical, &reader.cancel).await?
-            };
-            event.ending = frame.ending;
-            event.fragment = frame.fragment.map(|mut f| {
-                let header=decoder.docker_partial.as_ref().map_or(0,|p|p.2);
-                f.record=physical;f.start=f.start.saturating_sub(header);f.end=f.end.saturating_sub(header);f
-            });
-            event.quality.fragmented = event.fragment.is_some();
-            event.quality.incomplete = frame.ending == RecordEnding::Interrupted;
-            event.checkpoint_complete = !event.quality.incomplete;
-            event.transport_time = Some(timestamp.clone());
-            let mut hash = std::collections::hash_map::DefaultHasher::new();
-            frame.bytes.hash(&mut hash);
-            decoder.stream.hash(&mut hash);
-            event.quality.replay_suspected = cp.replay_suspected(&timestamp, hash.finish());
-            if frame.fragment.is_some_and(|f| f.final_part) { decoder.docker_partial = None; }
-            let ready = decoder.assembler.push(event, Instant::now());
-            reader.admit(ready, cp).await?;
+async fn docker_frame(
+    reader: &Reader,
+    decoder: &mut Decode,
+    frame: Frame,
+    cp: &mut Checkpoints,
+) -> Result<()> {
+    let continuation = frame.fragment.is_some_and(|f| f.start > 0);
+    let (timestamp, physical, payload) = if continuation {
+        let (timestamp, physical, _) = decoder
+            .docker_partial
+            .as_ref()
+            .ok_or_else(|| Error::Invalid("orphan Docker fragment".into()))?;
+        (timestamp.clone(), *physical, frame.bytes.as_slice())
+    } else {
+        let split = frame
+            .bytes
+            .iter()
+            .position(|b| *b == b' ')
+            .ok_or_else(|| Error::NeedsAction("Docker timestamps unavailable".into()))?;
+        let timestamp = std::str::from_utf8(&frame.bytes[..split])
+            .map_err(|_| Error::Invalid("Docker timestamp".into()))?;
+        if timestamp.len() > 40
+            || time::OffsetDateTime::parse(
+                timestamp,
+                &time::format_description::well_known::Rfc3339,
+            )
+            .is_err()
+        {
+            return Err(Error::NeedsAction(
+                "Docker permission/runtime error or invalid timestamp".into(),
+            ));
+        }
+        if !matches!(reader.spec, SourceSpec::Kubernetes { .. }) {
+            reader.state(
+                "streaming",
+                Some("Docker driver/cache/history coverage unknown; timestamp replay only".into()),
+            );
+        }
+        if cp.pending_len() >= 192 {
+            reader
+                .admit(decoder.assembler.flush(Instant::now()), cp)
+                .await?;
+        }
+        let physical = cp.allocate(Position::Docker(timestamp.into()))?;
+        if frame.fragment.is_some() {
+            decoder.docker_partial = Some((timestamp.into(), physical, (split + 1) as u64));
+        }
+        (timestamp.to_owned(), physical, &frame.bytes[split + 1..])
+    };
+    let mut event = if frame.fragment.is_some() || frame.ending == RecordEnding::Interrupted {
+        reader
+            .ingest
+            .raw(payload.to_vec(), decoder.stream, physical)
+    } else {
+        reader
+            .ingest
+            .normalize(payload.to_vec(), decoder.stream, physical, &reader.cancel)
+            .await?
+    };
+    event.ending = frame.ending;
+    event.fragment = frame.fragment.map(|mut f| {
+        let header = decoder.docker_partial.as_ref().map_or(0, |p| p.2);
+        f.record = physical;
+        f.start = f.start.saturating_sub(header);
+        f.end = f.end.saturating_sub(header);
+        f
+    });
+    event.quality.fragmented = event.fragment.is_some();
+    event.quality.incomplete = frame.ending == RecordEnding::Interrupted;
+    event.checkpoint_complete = !event.quality.incomplete;
+    event.transport_time = Some(timestamp.clone());
+    let mut hash = std::collections::hash_map::DefaultHasher::new();
+    frame.bytes.hash(&mut hash);
+    decoder.stream.hash(&mut hash);
+    event.quality.replay_suspected = cp.replay_suspected(&timestamp, hash.finish());
+    if frame.fragment.is_some_and(|f| f.final_part) {
+        decoder.docker_partial = None;
+    }
+    let ready = decoder.assembler.push(event, Instant::now());
+    reader.admit(ready, cp).await?;
     Ok(())
 }
 
@@ -352,7 +433,9 @@ async fn file(reader: &Reader, session: &Session, path: &str, cp: &mut Checkpoin
         }
         Ok(())
     }.await;
-    if !device.is_empty() && let Some(frame) = decoder.framer.interrupt() {
+    if !device.is_empty()
+        && let Some(frame) = decoder.framer.interrupt()
+    {
         let _ = file_frame(reader, &mut decoder, frame, cp, &device, &inode, epoch).await;
     }
     let flushed = reader
@@ -378,16 +461,35 @@ async fn file_frame(
         inode: inode.into(),
         next_offset: frame.end_offset.to_string(),
         guard: hex(&frame.guard),
-        partial: frame.fragment.filter(|_| frame.ending == RecordEnding::Fragment || frame.ending == RecordEnding::Interrupted).map(|f| FilePartial { record: f.record.to_string(), next_payload: f.end.to_string() }).or_else(|| (frame.ending == RecordEnding::Interrupted).then(|| FilePartial { record: (frame.end_offset - frame.bytes.len() as u64).to_string(), next_payload: frame.bytes.len().to_string() })),
+        partial: frame
+            .fragment
+            .filter(|_| {
+                frame.ending == RecordEnding::Fragment || frame.ending == RecordEnding::Interrupted
+            })
+            .map(|f| FilePartial {
+                record: f.record.to_string(),
+                next_payload: f.end.to_string(),
+            })
+            .or_else(|| {
+                (frame.ending == RecordEnding::Interrupted).then(|| FilePartial {
+                    record: (frame.end_offset - frame.bytes.len() as u64).to_string(),
+                    next_payload: frame.bytes.len().to_string(),
+                })
+            }),
     }))?;
     let mut event = if frame.fragment.is_some() || frame.ending == RecordEnding::Interrupted {
         reader.ingest.raw(frame.bytes, Stream::File, physical)
-    } else { reader.ingest.normalize(frame.bytes, Stream::File, physical, &reader.cancel).await? };
+    } else {
+        reader
+            .ingest
+            .normalize(frame.bytes, Stream::File, physical, &reader.cancel)
+            .await?
+    };
     event.ending = frame.ending;
     event.fragment = frame.fragment;
     event.quality.fragmented = event.fragment.is_some();
     event.quality.incomplete = frame.ending == RecordEnding::Interrupted;
-            event.checkpoint_complete = !event.quality.incomplete;
+    event.checkpoint_complete = !event.quality.incomplete;
     event.generation = format!("{}:{epoch}:{device}:{inode}", reader.generation);
     event.quality.truncated = frame.truncated;
     reader
@@ -427,16 +529,23 @@ fn conservative_since(timestamp: &str) -> Result<String> {
         .map_err(|_| Error::Invalid("Docker timestamp boundary".into()))
 }
 
-async fn kubernetes(reader:&Reader,session:&Session,cp:&mut Checkpoints)->Result<()> {
-    let mut args=serde_json::to_value(&reader.spec)?;
-    args["action"]=serde_json::json!("follow");
-    if let Some(Position::Docker(t))=&cp.position {args["since"]=serde_json::json!(conservative_since(t)?);}
-    let mut channel=session.spawn(RemoteOperation::Kubernetes(args)).await?;
-    let diagnostic=tokio::spawn(crate::adapters::ssh::bounded_read(channel.child.stderr.take().unwrap(),4096));
-    let mut output=BufReader::with_capacity(16*1024,channel.child.stdout.take().unwrap());
-    let mut decoder=Decode::new(Stream::Stdout);
-    let mut line=Vec::new();let mut tick=tokio::time::interval(Duration::from_millis(25));
-    let deadline=Instant::now()+Duration::from_secs(15);let mut opened=false;
+async fn kubernetes(reader: &Reader, session: &Session, cp: &mut Checkpoints) -> Result<()> {
+    let mut args = serde_json::to_value(&reader.spec)?;
+    args["action"] = serde_json::json!("follow");
+    if let Some(Position::Docker(t)) = &cp.position {
+        args["since"] = serde_json::json!(conservative_since(t)?);
+    }
+    let mut channel = session.spawn(RemoteOperation::Kubernetes(args)).await?;
+    let diagnostic = tokio::spawn(crate::adapters::ssh::bounded_read(
+        channel.child.stderr.take().unwrap(),
+        4096,
+    ));
+    let mut output = BufReader::with_capacity(16 * 1024, channel.child.stdout.take().unwrap());
+    let mut decoder = Decode::new(Stream::Stdout);
+    let mut line = Vec::new();
+    let mut tick = tokio::time::interval(Duration::from_millis(25));
+    let deadline = Instant::now() + Duration::from_secs(15);
+    let mut opened = false;
     let result=async {
         loop {
             let mut limited=(&mut output).take((4097-line.len()) as u64);
@@ -464,7 +573,13 @@ async fn kubernetes(reader:&Reader,session:&Session,cp:&mut Checkpoints)->Result
         }
         Ok(())
     }.await;
-    if let Some(frame)=decoder.framer.interrupt(){let _=docker_frame(reader,&mut decoder,frame,cp).await;}
-    let flushed=reader.admit(decoder.assembler.flush(Instant::now()),cp).await;
-    channel.close().await;diagnostic.abort();result.and(flushed)
+    if let Some(frame) = decoder.framer.interrupt() {
+        let _ = docker_frame(reader, &mut decoder, frame, cp).await;
+    }
+    let flushed = reader
+        .admit(decoder.assembler.flush(Instant::now()), cp)
+        .await;
+    channel.close().await;
+    diagnostic.abort();
+    result.and(flushed)
 }

@@ -1,5 +1,7 @@
 # Phase 3 — Evidence triển khai
 
+> Historical validation record. Synthetic examples, fixtures, raw observation artifacts and the `manual-fixtures` feature were removed during source cleanup on 25/11/2026. Commands mentioning them describe past runs and are no longer current setup instructions. Use `npm run contracts` for TypeScript generation and the desktop runtime for real sources.
+
 Ngày 20/11/2026, Asia/Bangkok. Triển khai code 3.1–3.6 theo yêu cầu toàn phase. **Gate PARTIAL**: các prerequisite runtime của phase 1–2 vẫn còn, Claude mới handshake/discover, chưa chạy model Ollama/BYOK thật. Không viết automated tests/framework; examples in observations để operator đọc thủ công.
 
 ## Code và giới hạn hiện hành

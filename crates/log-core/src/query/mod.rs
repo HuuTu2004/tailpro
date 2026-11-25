@@ -9,49 +9,129 @@ enum Predicate {
     Duration(Comparison, f64),
 }
 #[derive(Clone, Debug)]
-struct Needle { text: String, prefix: Vec<usize> }
+struct Needle {
+    text: String,
+    prefix: Vec<usize>,
+}
 impl Needle {
-    fn new(text:String)->Self {
-        let mut prefix=vec![0;text.len()];let bytes=text.as_bytes();let mut j=0;
-        for i in 1..bytes.len() {while j>0&&bytes[i]!=bytes[j]{j=prefix[j-1];}if bytes[i]==bytes[j]{j+=1;}prefix[i]=j;}
-        Self{text,prefix}
+    fn new(text: String) -> Self {
+        let mut prefix = vec![0; text.len()];
+        let bytes = text.as_bytes();
+        let mut j = 0;
+        for i in 1..bytes.len() {
+            while j > 0 && bytes[i] != bytes[j] {
+                j = prefix[j - 1];
+            }
+            if bytes[i] == bytes[j] {
+                j += 1;
+            }
+            prefix[i] = j;
+        }
+        Self { text, prefix }
     }
-    fn feed(&self,bytes:&[u8],progress:&mut usize)->bool {
-        if self.text.is_empty(){return true;}
-        let mut found=false;
-        for byte in bytes {while *progress>0&&*byte!=self.text.as_bytes()[*progress]{*progress=self.prefix[*progress-1];}if *byte==self.text.as_bytes()[*progress]{*progress+=1;}if *progress==self.text.len(){found=true;*progress=self.prefix[*progress-1];}}
+    fn feed(&self, bytes: &[u8], progress: &mut usize) -> bool {
+        if self.text.is_empty() {
+            return true;
+        }
+        let mut found = false;
+        for byte in bytes {
+            while *progress > 0 && *byte != self.text.as_bytes()[*progress] {
+                *progress = self.prefix[*progress - 1];
+            }
+            if *byte == self.text.as_bytes()[*progress] {
+                *progress += 1;
+            }
+            if *progress == self.text.len() {
+                found = true;
+                *progress = self.prefix[*progress - 1];
+            }
+        }
         found
     }
-    fn contains(&self,bytes:&[u8])->bool {std::str::from_utf8(bytes).map_or_else(|_|self.feed(bytes,&mut 0),|s|s.contains(&self.text))}
+    fn contains(&self, bytes: &[u8]) -> bool {
+        std::str::from_utf8(bytes)
+            .map_or_else(|_| self.feed(bytes, &mut 0), |s| s.contains(&self.text))
+    }
 }
 /// Local scans only. External consumers use matches() on sanitized projections.
-struct FragmentState { source:String,generation:String,stream:crate::model::Stream,record:u64,end:u64,progress:Vec<usize>,seen:Vec<bool> }
-pub struct LocalMatcher<'a> { plan:&'a QueryPlan, states:Vec<FragmentState> }
+struct FragmentState {
+    source: String,
+    generation: String,
+    stream: crate::model::Stream,
+    record: u64,
+    end: u64,
+    progress: Vec<usize>,
+    seen: Vec<bool>,
+}
+pub struct LocalMatcher<'a> {
+    plan: &'a QueryPlan,
+    states: Vec<FragmentState>,
+}
 impl<'a> LocalMatcher<'a> {
-    pub fn new(plan:&'a QueryPlan)->Self {Self{plan,states:Vec::new()}}
-    pub fn matches(&mut self,event:&Event,server:&str)->bool {
-        let Some(fragment)=event.fragment else {
-            self.states.retain(|s|s.source!=event.source||s.stream!=event.stream);
-            return self.plan.matches(event,server);
-        };
-        let index=self.states.iter().position(|s|s.source==event.source&&s.stream==event.stream);
-        let valid=index.is_some_and(|i|{let s=&self.states[i];s.generation==event.generation&&s.record==fragment.record&&s.end==fragment.start});
-        let i=if valid {index.unwrap()} else {
-            if let Some(i)=index{self.states.swap_remove(i);}
-            if self.states.len()>=crate::model::MAX_SOURCES*5 {self.states.remove(0);}
-            self.states.push(FragmentState{source:event.source.clone(),generation:event.generation.clone(),stream:event.stream,record:fragment.record,end:fragment.start,progress:vec![0;self.plan.predicates.len()],seen:vec![false;self.plan.predicates.len()]});self.states.len()-1
-        };
-        let state=&mut self.states[i];
-        let mut matched=true;
-        let mut fresh=false;
-        let mut has_literal=false;
-        for (j,p) in self.plan.predicates.iter().enumerate() {
-            let hit=match p {Predicate::Literal(n)=>{has_literal=true;let hit=n.feed(event.raw.bytes(),&mut state.progress[j]);fresh|=hit;state.seen[j]|=hit;state.seen[j]},_=>self.plan.matches_predicate(p,event,server)};
-            matched&=hit;
+    pub fn new(plan: &'a QueryPlan) -> Self {
+        Self {
+            plan,
+            states: Vec::new(),
         }
-        state.end=fragment.end;
-        if fragment.final_part {self.states.swap_remove(i);}
-        matched && (fresh||!has_literal)
+    }
+    pub fn matches(&mut self, event: &Event, server: &str) -> bool {
+        let Some(fragment) = event.fragment else {
+            self.states
+                .retain(|s| s.source != event.source || s.stream != event.stream);
+            return self.plan.matches(event, server);
+        };
+        let index = self
+            .states
+            .iter()
+            .position(|s| s.source == event.source && s.stream == event.stream);
+        let valid = index.is_some_and(|i| {
+            let s = &self.states[i];
+            s.generation == event.generation
+                && s.record == fragment.record
+                && s.end == fragment.start
+        });
+        let i = if valid {
+            index.unwrap()
+        } else {
+            if let Some(i) = index {
+                self.states.swap_remove(i);
+            }
+            if self.states.len() >= crate::model::MAX_SOURCES * 5 {
+                self.states.remove(0);
+            }
+            self.states.push(FragmentState {
+                source: event.source.clone(),
+                generation: event.generation.clone(),
+                stream: event.stream,
+                record: fragment.record,
+                end: fragment.start,
+                progress: vec![0; self.plan.predicates.len()],
+                seen: vec![false; self.plan.predicates.len()],
+            });
+            self.states.len() - 1
+        };
+        let state = &mut self.states[i];
+        let mut matched = true;
+        let mut fresh = false;
+        let mut has_literal = false;
+        for (j, p) in self.plan.predicates.iter().enumerate() {
+            let hit = match p {
+                Predicate::Literal(n) => {
+                    has_literal = true;
+                    let hit = n.feed(event.raw.bytes(), &mut state.progress[j]);
+                    fresh |= hit;
+                    state.seen[j] |= hit;
+                    state.seen[j]
+                }
+                _ => self.plan.matches_predicate(p, event, server),
+            };
+            matched &= hit;
+        }
+        state.end = fragment.end;
+        if fragment.final_part {
+            self.states.swap_remove(i);
+        }
+        matched && (fresh || !has_literal)
     }
 }
 #[derive(Clone, Debug)]
@@ -180,7 +260,8 @@ impl QueryPlan {
                 if !matches!(
                     field,
                     "level" | "source" | "server" | "message" | "trace_id" | "order_id" | "user_id"
-                ) && !(field.starts_with("attr.")&&field.len()<=133) {
+                ) && !(field.starts_with("attr.") && field.len() <= 133)
+                {
                     return Err(invalid("Unknown field"));
                 }
                 if !value.starts_with('"')
@@ -217,10 +298,15 @@ impl QueryPlan {
         Ok(Self { predicates })
     }
     pub fn matches(&self, event: &Event, server: &str) -> bool {
-        self.predicates.iter().all(|p|self.matches_predicate(p,event,server))
+        self.predicates
+            .iter()
+            .all(|p| self.matches_predicate(p, event, server))
     }
-    fn matches_predicate(&self,p:&Predicate,event:&Event,server:&str)->bool { match p {
-            Predicate::Literal(s) => event.message.contains(&s.text) || s.contains(event.raw.bytes()),
+    fn matches_predicate(&self, p: &Predicate, event: &Event, server: &str) -> bool {
+        match p {
+            Predicate::Literal(s) => {
+                event.message.contains(&s.text) || s.contains(event.raw.bytes())
+            }
             Predicate::Field(field, value) => match field.as_str() {
                 "level" => event.level.as_str().eq_ignore_ascii_case(value),
                 "source" => event.source == *value,
@@ -229,7 +315,9 @@ impl QueryPlan {
                 "trace_id" => event.trace_id.as_ref() == Some(value),
                 "order_id" => event.order_id.as_ref() == Some(value),
                 "user_id" => event.user_id.as_ref() == Some(value),
-                name if name.starts_with("attr.") => crate::inspect::attribute(&event.raw,&name[5..]).as_ref()==Some(value),
+                name if name.starts_with("attr.") => {
+                    crate::inspect::attribute(&event.raw, &name[5..]).as_ref() == Some(value)
+                }
                 _ => false,
             },
             Predicate::Duration(op, n) => event.duration_ms.is_some_and(|v| match op {
@@ -309,7 +397,7 @@ pub fn scan<'a, 'h>(
     let mut scanned = 0;
     let mut matched = 0;
     let mut complete = true;
-    let mut matcher=LocalMatcher::new(plan);
+    let mut matcher = LocalMatcher::new(plan);
     for e in snapshot.events()? {
         if scanned % 128 == 0 && (cancelled() || Instant::now() >= deadline) {
             complete = false;

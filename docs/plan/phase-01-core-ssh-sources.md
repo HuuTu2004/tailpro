@@ -39,7 +39,7 @@ Khi giao code, chỉ định một mục, ví dụ `1.1`. Mục khác trong phas
 
 **Đầu ra:** Biến physical records thành event đọc được, giữ đủ stack khi lọc lỗi.
 
-**Dependency:** 1.1 · **Code:** `log-core/{model,parse}/`, synthetic `fixtures/`.
+**Dependency:** 1.1 · **Code:** `log-core/{model,parse}/`; kết quả input synthetic cũ được ghi trong acceptance lịch sử.
 
 1. Thêm bounded framing, timestamp/level/message/ID/duration extraction và opaque wire IDs.
 2. Strip ANSI trước parse và sau JSON-unescape; malformed/oversize input trả text/quality flags có giới hạn.
@@ -137,5 +137,5 @@ Core/desktop build được; chọn nguồn, ingest và stop sạch trên 2 host
 - Chạy desktop từ workspace root: `npm ci`, `npm run contracts`, `npm run tauri dev`.
 - Scoped checks theo [compile guide](build-performance.md); thao tác smoke/profiling và số đo ở [acceptance](../process/phase-01-acceptance.md).
 - Hai core libraries build headless qua default workspace members; desktop package là `tailpro-desktop`, embedded frontend dùng feature `custom-protocol`.
-- `app-core/examples/session.rs` chọn disposable SSH alias và synthetic file/container; `multi_source.rs` chạy hai endpoint/bốn file. Đây là driver thủ công, không có automated assertions/tests.
+- Acceptance hiện tại chạy qua desktop trên host/source được user chọn. Session/multi-source drivers cũ đã được loại bỏ; kết quả lịch sử vẫn nằm trong acceptance, không thay cho gate trên target thật.
 - Module tồn tại hoặc build pass chưa đủ đóng gate; trạng thái chính thức nằm ở process.

@@ -47,7 +47,7 @@ Choose the checks relevant to your change:
 cargo fmt --all --check
 cargo check -p log-core --lib
 cargo check -p app-core --lib
-cargo clippy -p log-core -p app-core --lib --examples -- -D warnings
+cargo clippy -p log-core -p app-core --lib -- -D warnings
 npm run typecheck
 npm run build
 ```

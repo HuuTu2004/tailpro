@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
-pub mod ingestion;
 pub mod evidence;
+pub mod ingestion;
 mod payload;
 pub use payload::{Fragment, RawPayload, RecordEnding};
 
@@ -31,7 +31,16 @@ pub enum Level {
 }
 
 impl Level {
-    pub fn as_str(self)->&'static str {match self{Self::Trace=>"trace",Self::Debug=>"debug",Self::Info=>"info",Self::Warn=>"warn",Self::Error=>"error",Self::Unknown=>"unknown"}}
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Trace => "trace",
+            Self::Debug => "debug",
+            Self::Info => "info",
+            Self::Warn => "warn",
+            Self::Error => "error",
+            Self::Unknown => "unknown",
+        }
+    }
 }
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Quality {
@@ -107,9 +116,17 @@ pub struct Counters {
 /// Bounded cardinality: one cumulative entry per retained/active source (at most 8).
 #[derive(Clone, Debug, Default, Serialize)]
 pub struct IngestionMetrics {
-    pub admission_units: u64, pub physical_records: u64,
-    pub accepted_units:u64, pub gap_units:u64,
-    pub observed_bytes:u64, pub represented_bytes:u64, pub gap_bytes:u64,
-    pub retention_evicted_bytes:u64, pub raw_fallback:u64, pub malformed:u64,
-    pub encoding_loss:u64, pub conflicts:u64, pub fragments:u64,
+    pub admission_units: u64,
+    pub physical_records: u64,
+    pub accepted_units: u64,
+    pub gap_units: u64,
+    pub observed_bytes: u64,
+    pub represented_bytes: u64,
+    pub gap_bytes: u64,
+    pub retention_evicted_bytes: u64,
+    pub raw_fallback: u64,
+    pub malformed: u64,
+    pub encoding_loss: u64,
+    pub conflicts: u64,
+    pub fragments: u64,
 }

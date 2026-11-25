@@ -1,6 +1,6 @@
 pub mod decode;
-mod header;
 mod framing;
+mod header;
 mod multiline;
 mod normalize;
 pub use framing::{Frame, Framer};

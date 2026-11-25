@@ -81,7 +81,6 @@ pub fn run() {
             super::commands::saved_views,
             super::commands::save_view,
             super::commands::delete_view,
-            super::commands::preview
         ])
         .build(tauri::generate_context!())
         .expect("TailPro bootstrap");

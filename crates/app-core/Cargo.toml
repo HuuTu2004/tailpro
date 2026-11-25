@@ -21,18 +21,3 @@ regex = "1"
 toml = "=1.2.1"
 libc = "0.2"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
-
-[features]
-manual-fixtures = []
-
-[[example]]
-name = "security_observations"
-required-features = ["manual-fixtures"]
-
-[[example]]
-name = "explain_observations"
-required-features = ["manual-fixtures"]
-
-[[example]]
-name = "production_observations"
-required-features = ["manual-fixtures"]

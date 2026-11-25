@@ -1,5 +1,7 @@
 # Phase 1 — Evidence triển khai
 
+> Historical validation record. Synthetic examples, fixtures, raw observation artifacts and the `manual-fixtures` feature were removed during source cleanup on 25/11/2026. Commands mentioning them describe past runs and are no longer current setup instructions. Use `npm run contracts` for TypeScript generation and the desktop runtime for real sources.
+
 Ngày 20/11/2026, Asia/Bangkok. Không viết automated tests/framework. Các examples được operator gọi thủ công, in observations và không tự assertion/pass-fail.
 
 ## Môi trường

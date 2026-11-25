@@ -7,7 +7,7 @@ Phase 1 has a Rust workspace and Tauri/React desktop shell. Consult `docs/proces
 - `crates/log-core`: pure parsing, immutable segments, reservations, snapshots and journal.
 - `crates/app-core`: application API, OpenSSH, source readers, discovery and settings.
 - `src-tauri`: composition root and native commands; `src`: React connections/sources UI.
-- `crates/*/examples`: manually invoked profiling/acceptance drivers; synthetic inputs in `fixtures/`.
+- `crates/app-protocol`: shared wire DTOs and the `export-contracts` TypeScript generator.
 
 - `docs/process/current-status.md`: current progress, blockers, and next action.
 - `docs/system-design/architecture.md`: code map, ownership, dependencies, and budgets.

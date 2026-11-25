@@ -1,5 +1,7 @@
 # Phase 2 — Evidence triển khai
 
+> Historical validation record. Synthetic examples, fixtures, raw observation artifacts and the `manual-fixtures` feature were removed during source cleanup on 25/11/2026. Commands mentioning them describe past runs and are no longer current setup instructions. Use `npm run contracts` for TypeScript generation and the desktop runtime for real sources.
+
 Ngày 20/11/2026, Asia/Bangkok. Scope được giao là toàn file `phase-02-viewer-experience.md` (2.1–2.5). Không tạo automated tests/framework; các examples chỉ in observations, được gọi thủ công.
 
 ## Implementation

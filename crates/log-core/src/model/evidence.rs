@@ -1,13 +1,24 @@
-use serde::Serialize;
 use super::ingestion::{FieldOrigin, SeverityNamespace};
+use serde::Serialize;
 
 #[derive(Clone, Copy, Debug, Default, Serialize)]
-#[serde(rename_all="snake_case")]
-pub enum Decoder { Json, Logfmt, Header, Rule, #[default] Raw }
-#[derive(Debug, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Decoder {
+    Json,
+    Logfmt,
+    Header,
+    Rule,
+    #[default]
+    Raw,
+}
+#[derive(Clone, Debug, Serialize)]
 pub struct ParseEvidence {
     pub decoder: Decoder,
+    #[serde(serialize_with = "serialize_revision")]
     pub revision: u64,
+    pub group_family: Option<&'static str>,
+    pub group_flush: Option<&'static str>,
+    pub group_lines: u16,
     pub conflict: bool,
     pub time_origin: FieldOrigin,
     pub epoch_unit: Option<super::ingestion::EpochUnit>,
@@ -21,8 +32,35 @@ pub struct ParseEvidence {
     pub derived_http_error: bool,
 }
 impl Default for ParseEvidence {
-    fn default() -> Self { Self { decoder: Decoder::Raw, revision: 1, conflict: false, time_origin: FieldOrigin::Unknown, epoch_unit: None, event_time_ns: None, time_literal: None, time_path: None, severity_origin: FieldOrigin::Unknown, severity_namespace: SeverityNamespace::Unknown, severity_literal: None, http_status: None, derived_http_error: false } }
+    fn default() -> Self {
+        Self {
+            decoder: Decoder::Raw,
+            revision: 1,
+            group_family: None,
+            group_flush: None,
+            group_lines: 0,
+            conflict: false,
+            time_origin: FieldOrigin::Unknown,
+            epoch_unit: None,
+            event_time_ns: None,
+            time_literal: None,
+            time_path: None,
+            severity_origin: FieldOrigin::Unknown,
+            severity_namespace: SeverityNamespace::Unknown,
+            severity_literal: None,
+            http_status: None,
+            derived_http_error: false,
+        }
+    }
 }
 impl ParseEvidence {
-    pub fn charged_bytes(&self) -> usize { self.event_time_ns.as_ref().map_or(0,String::capacity) + self.time_literal.as_ref().map_or(0,String::capacity) + self.severity_literal.as_ref().map_or(0,String::capacity) }
+    pub fn charged_bytes(&self) -> usize {
+        self.event_time_ns.as_ref().map_or(0, String::capacity)
+            + self.time_literal.as_ref().map_or(0, String::capacity)
+            + self.severity_literal.as_ref().map_or(0, String::capacity)
+    }
+}
+
+fn serialize_revision<S: serde::Serializer>(value: &u64, serializer: S) -> Result<S::Ok, S::Error> {
+    serializer.serialize_str(&value.to_string())
 }

@@ -1,5 +1,5 @@
+use super::decode::{ParseProfile, decode};
 use crate::model::{Event, Level, Quality, RawPayload, RecordEnding, Stream};
-use super::decode::{decode, ParseProfile};
 
 /// Discard CSI, OSC and other terminal control sequences; never interpret them.
 pub fn strip_ansi(input: &str) -> String {
@@ -30,24 +30,66 @@ pub fn strip_ansi(input: &str) -> String {
     }
     out
 }
-pub fn normalize(bytes: &[u8], source: &str, generation: u64, stream: Stream, physical: u64, observed_ms: u64) -> Event {
-    normalize_with(bytes, source, generation, stream, physical, observed_ms, &ParseProfile::default())
+pub fn normalize(
+    bytes: &[u8],
+    source: &str,
+    generation: u64,
+    stream: Stream,
+    physical: u64,
+    observed_ms: u64,
+) -> Event {
+    normalize_with(
+        bytes,
+        source,
+        generation,
+        stream,
+        physical,
+        observed_ms,
+        &ParseProfile::default(),
+    )
 }
 #[allow(clippy::too_many_arguments)]
-pub fn normalize_with(bytes: &[u8], source: &str, generation: u64, stream: Stream, physical: u64, observed_ms: u64, profile: &ParseProfile) -> Event {
-    let mut event = raw(bytes.to_vec(), source, generation, stream, physical, observed_ms);
-    if event.quality.lossy_utf8 { return event; }
+pub fn normalize_with(
+    bytes: &[u8],
+    source: &str,
+    generation: u64,
+    stream: Stream,
+    physical: u64,
+    observed_ms: u64,
+    profile: &ParseProfile,
+) -> Event {
+    let mut event = raw(
+        bytes.to_vec(),
+        source,
+        generation,
+        stream,
+        physical,
+        observed_ms,
+    );
+    if event.quality.lossy_utf8 {
+        return event;
+    }
     let mut fields = decode(&event.raw, profile);
     event.message = fields.message.unwrap_or_else(|| strip_ansi(&event.raw));
     if event.message.len() > crate::model::FRAME_BYTES {
         let mut end = crate::model::FRAME_BYTES;
-        while !event.message.is_char_boundary(end) { end -= 1; }
+        while !event.message.is_char_boundary(end) {
+            end -= 1;
+        }
         event.message.truncate(end);
         event.quality.truncated = true;
     }
     event.level = fields.level;
     fields.evidence.event_time_ns = fields.time.clone();
-    event.event_time = fields.time.as_ref().and_then(|s|s.parse::<i128>().ok()).and_then(|n|time::OffsetDateTime::from_unix_timestamp_nanos(n).ok()).and_then(|t|t.format(&time::format_description::well_known::Rfc3339).ok());
+    event.event_time = fields
+        .time
+        .as_ref()
+        .and_then(|s| s.parse::<i128>().ok())
+        .and_then(|n| time::OffsetDateTime::from_unix_timestamp_nanos(n).ok())
+        .and_then(|t| {
+            t.format(&time::format_description::well_known::Rfc3339)
+                .ok()
+        });
     event.trace_id = fields.trace;
     event.order_id = fields.order;
     event.user_id = fields.user;
@@ -57,7 +99,14 @@ pub fn normalize_with(bytes: &[u8], source: &str, generation: u64, stream: Strea
     event
 }
 /// Preserve a bounded uninterpreted payload; used for fragments and raw-only mode.
-pub fn raw(bytes: Vec<u8>, source: &str, generation: u64, stream: Stream, physical: u64, observed_ms: u64) -> Event {
+pub fn raw(
+    bytes: Vec<u8>,
+    source: &str,
+    generation: u64,
+    stream: Stream,
+    physical: u64,
+    observed_ms: u64,
+) -> Event {
     let raw = RawPayload::new(bytes);
     Event {
         id: String::new(),
@@ -77,7 +126,10 @@ pub fn raw(bytes: Vec<u8>, source: &str, generation: u64, stream: Stream, physic
         order_id: None,
         user_id: None,
         duration_ms: None,
-        quality: Quality { lossy_utf8: std::str::from_utf8(raw.bytes()).is_err(), ..Quality::default() },
+        quality: Quality {
+            lossy_utf8: std::str::from_utf8(raw.bytes()).is_err(),
+            ..Quality::default()
+        },
         physical: vec![physical],
         sequence: 0,
         checkpoint_complete: true,
